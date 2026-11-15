@@ -96,7 +96,7 @@ func TestTickTraces(t *testing.T) {
 
 	steps := []string{
 		"sweep", "provider_pass", "probe_outages", "run_triggers", "place_steps", "supervise", "run_auto_steps",
-		"report_orphans", "scan_sessions", "sweep_runs", "sweep_escalation_chats", "sweep_attention_chats",
+		"report_orphans", "sweep_runs", "sweep_escalation_chats", "sweep_attention_chats",
 		"sweep_batches", "sweep_linear_asks", "sweep_linear_agent_sessions",
 	}
 	for _, s := range steps {

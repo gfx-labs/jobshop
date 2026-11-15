@@ -58,15 +58,51 @@ without `process_stalled` when the database was.
 
 ## Not done
 
-The cause of the 7.3s tick is not recorded. The next slow tick on selfdev
-carries the evidence; add its `slow tick` record below, with the hints, and
-then fix it or close JOB-212 with the cause. The probe does not change any
-setting.
+- [x] Name the slow step (JOB-221, 2026-11-15): `scan_sessions`, below.
+- [x] Take it off the tick path (JOB-221): it is a housekeeping step now.
+- [ ] Name the substep. The records below predate substep timing. The first
+  `slow scan_sessions` record on selfdev after this lands names it; add it
+  here.
+
+The probe does not change any setting.
 
 ## Trace
 
-None yet. Format for the entry (from the journal, `grep 'slow tick'`):
+Four ticks on selfdev, 2026-11-15 (journal, `grep 'slow tick'`):
 
-    <date> seconds=<s> slowest_step=<step> hints=<...> stalls=<n> stall_max_seconds=<s> psi_cpu_seconds=<s> ...
-    cause: <one line>
-EOF
+| time (UTC) | seconds | slowest_step | step seconds | hints | writer waits |
+| -- | -- | -- | -- | -- | -- |
+| 08:54:23 | 5.8 | scan_sessions | 3.8 | cpu_pressure, memory_pressure | 0 |
+| 08:55:19 | 31.5 | scan_sessions | 31.1 | cpu_pressure | 0 |
+| 08:55:21 | 1.9 | scan_sessions | 0.9 | cpu_pressure, writer_queue | 19 (3.8s) |
+| 08:56:01 | 13.9 | scan_sessions | 11.2 | cpu_pressure | 5 (0.7s) |
+
+All four: `stalls=0`, `throttled_seconds=0`, `db_written=false`,
+`wal_delta_bytes=0`, no reader waits, GC pause under 12ms. The process and
+the database were not stalled; the time is inside `scan_sessions`, with
+host CPU pressure (psi_cpu 3 to 14s) in every record.
+
+cause: `scan_sessions` ran under `tickMu` and does only file I/O and store
+reads, not worktree removal (`removeWorktree` is on the session-end path, not
+here). Per pass it (1) lists open sessions, (2) `ReadDir`s the session
+directory (about 3200 entries on selfdev) and, for each, reads
+`supervisor.pid`, opens `supervisor.lock` and `flock`s it, and (3) until every
+closed session has `Ended`, lists all closed sessions and reads the exit file
+and journal tail of up to 100 of them; a compressed journal with no seek
+table or index is decompressed whole to find its last seq. Thousands of
+syscalls and file reads are cheap on an idle host and take seconds when the
+process is starved of CPU, and every other tick step waited behind them. The
+records do not say which of (2) and (3) took the 31s: that is not proven.
+
+fix: `scan_sessions` moved out of the tick into the housekeeping loop (own
+goroutine, no `tickMu`, once a minute and at start). Its consumers read the
+last result (`scannedOrphans`), and before the first scan walk the directory
+themselves, so the only change is that an orphan host appears in `session.list`
+within a minute instead of one tick. Each scan records its substep times
+(`list_open`, `walk` with directory count and slowest directory,
+`list_closed`, `backfill` with sessions filled and slowest session) as
+`jobshop.scan.*` attributes on its `housekeeping scan_sessions` span, and a
+scan of `Options.SlowTick` or more logs one `slow scan_sessions` warning with
+the same fields. A tick that overlaps a scan carries
+`housekeeping:scan_sessions` in its `hints`.
+Tests: `TestScanSessionsOffTick`, `TestScanSessionsSlowSubstep`.
