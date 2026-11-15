@@ -24,8 +24,16 @@ covered in `tick-latency.md`.
    - `none`: no candidate matched. Compare `slowest_step` with the `store.*`
      spans; a step slow on its own (a command, an HTTP call) is not a store
      problem.
+   - `housekeeping:scan_sessions` (JOB-221): the session directory scan ran
+     during the tick. It is not a tick step, so it cannot hold the pass, but
+     it competes for CPU and the writer. Its own record is
+     `journalctl -u jobshop | grep 'slow scan_sessions'`: `list_open_seconds`,
+     `walk_seconds` (with `dirs` and `slowest_dir`), `list_closed_seconds` and
+     `backfill_seconds` (with `backfilled` and `slowest_ended`) say which
+     substep took the time. The same fields are `jobshop.scan.*` on the
+     `housekeeping scan_sessions` span.
 3. **Drill on a throwaway controller** (isolated-controller skill): run
-   `go test ./pkg/orchestration/control -run 'TestTickProbeReport|TestSlowTickLogged'`.
+   `go test ./pkg/orchestration/control -run 'TestTickProbeReport|TestSlowTickLogged|TestScanSessions'`.
    The first feeds fixture `/proc`, cgroup and database files and expects each
    hint; the second runs a real pass with the threshold at 1ns and expects the
    `slow tick` record.

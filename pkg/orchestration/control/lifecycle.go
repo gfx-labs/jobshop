@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/gfx-labs/jobshop/pkg/domain"
 	"github.com/gfx-labs/jobshop/pkg/execution/session"
@@ -23,6 +24,12 @@ func (c *Controller) reapOrphans(open []domain.Ticket) {
 // orphans lists session directories with a live host whose session is not
 // in open.
 func (c *Controller) orphans(open []domain.Ticket) []string {
+	return c.orphansWith(open, nil)
+}
+
+// orphansWith is orphans that calls each, when set, with every session
+// directory it checked and how long the check took (JOB-221).
+func (c *Controller) orphansWith(open []domain.Ticket, each func(id string, took time.Duration)) []string {
 	keep := map[string]bool{}
 	for _, t := range open {
 		keep[t.ID] = true
@@ -33,8 +40,12 @@ func (c *Controller) orphans(open []domain.Ticket) []string {
 	}
 	var out []string
 	for _, e := range entries {
+		start := c.now()
 		if !keep[e.Name()] && session.HostAlive(c.root.SessionDir(e.Name())) {
 			out = append(out, e.Name())
+		}
+		if each != nil {
+			each(e.Name(), c.since(start))
 		}
 	}
 	return out

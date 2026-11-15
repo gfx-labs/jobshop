@@ -2,10 +2,15 @@ package control
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"slices"
+	"strings"
+	"time"
 
 	host "github.com/gfx-labs/acphost/pkg/acphost"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/gfx-labs/jobshop/pkg/domain"
 	"github.com/gfx-labs/jobshop/pkg/execution/session"
@@ -45,32 +50,114 @@ func (c *Controller) saveEnded(ctx context.Context, id string) {
 	}
 }
 
-// scanSessions is the supervisor pass's walk of the session directories:
-// it keeps the ids with a live host and no open session ticket, and
-// fills Ended on closed sessions that ended before it was recorded.
+// scanTimes is where one scan spent its time (JOB-221): the substeps,
+// what each walked, and the slowest single directory or session, so a
+// slow scan names its cause.
+type scanTimes struct {
+	ListOpen, Walk, ListClosed, Backfill time.Duration
+	Dirs, Orphans, Filled                int
+	SlowestDir, SlowestEnded             time.Duration
+	SlowestDirID, SlowestEndedID         string
+}
+
+func (s scanTimes) total() time.Duration { return s.ListOpen + s.Walk + s.ListClosed + s.Backfill }
+
+// attrs is the span and log form of the times.
+func (s scanTimes) attrs() []attribute.KeyValue {
+	return []attribute.KeyValue{
+		attribute.Float64("jobshop.scan.list_open_seconds", s.ListOpen.Seconds()),
+		attribute.Float64("jobshop.scan.walk_seconds", s.Walk.Seconds()),
+		attribute.Int("jobshop.scan.dirs", s.Dirs),
+		attribute.Int("jobshop.scan.orphans", s.Orphans),
+		attribute.Float64("jobshop.scan.slowest_dir_seconds", s.SlowestDir.Seconds()),
+		attribute.String("jobshop.scan.slowest_dir", s.SlowestDirID),
+		attribute.Float64("jobshop.scan.list_closed_seconds", s.ListClosed.Seconds()),
+		attribute.Float64("jobshop.scan.backfill_seconds", s.Backfill.Seconds()),
+		attribute.Int("jobshop.scan.backfilled", s.Filled),
+		attribute.Float64("jobshop.scan.slowest_ended_seconds", s.SlowestEnded.Seconds()),
+		attribute.String("jobshop.scan.slowest_ended", s.SlowestEndedID),
+	}
+}
+
+// scanSessions walks the session directories: it keeps the ids with a live
+// host and no open session ticket, and fills Ended on closed sessions that
+// ended before it was recorded. It is a housekeeping step, not a tick
+// step (JOB-221): it does file I/O for every session directory ever made
+// (thousands) and, until Ended is filled, reads the journal tail of closed
+// sessions, which can decompress a whole journal. Under tickMu it held the
+// pass for up to 31s while the host was under CPU pressure. A scan at or
+// over the slow tick threshold logs "slow scan_sessions" with the
+// substep times.
 func (c *Controller) scanSessions(ctx context.Context) {
+	var tm scanTimes
+	mark := c.scanMark()
+	defer func() {
+		trace.SpanFromContext(ctx).SetAttributes(tm.attrs()...)
+		if tm.total() < c.slowScan() {
+			return
+		}
+		args := []any{"seconds", fmt.Sprintf("%.3f", tm.total().Seconds())}
+		for _, kv := range tm.attrs() {
+			args = append(args, strings.TrimPrefix(string(kv.Key), "jobshop.scan."), kv.Value.String())
+		}
+		c.log.WarnContext(ctx, "slow scan_sessions", args...)
+	}()
 	open, err := c.store.List(ctx, store.Filter{Kind: domain.KindSession, Statuses: []domain.Status{domain.StatusOpen, domain.StatusInProgress}, Limit: math.MaxInt32})
+	mark(&tm.ListOpen, "list_open")
 	if err != nil {
 		return
 	}
-	orphans := c.orphans(open)
+	orphans := c.orphansWith(open, func(id string, took time.Duration) {
+		tm.Dirs++
+		if took > tm.SlowestDir {
+			tm.SlowestDir, tm.SlowestDirID = took, id
+		}
+	})
+	mark(&tm.Walk, "walk")
+	tm.Orphans = len(orphans)
 	c.sessScanMu.Lock()
 	c.sessOrphans = orphans
 	c.sessScanned = true
 	done := c.endedFilled
 	c.sessScanMu.Unlock()
 	if !done {
-		c.backfillEnded(ctx, orphans)
+		c.backfillEnded(ctx, orphans, &tm, mark)
+	}
+}
+
+// slowScan is the scan length that gets a log line: the slow tick
+// threshold.
+func (c *Controller) slowScan() time.Duration {
+	if c.probe != nil {
+		return c.probe.slow
+	}
+	return slowTickAfter
+}
+
+// scanMark returns a func that adds the time since its last call to *d, on
+// the controller's clock, after calling scanHook with the substep name
+// (tests advance a fake clock there to make one substep slow).
+func (c *Controller) scanMark() func(d *time.Duration, name string) {
+	last := c.now()
+	return func(d *time.Duration, name string) {
+		if c.scanHook != nil {
+			c.scanHook(name)
+		}
+		now := c.now()
+		*d += now.Sub(last)
+		last = now
 	}
 }
 
 // backfillEnded fills Ended on up to endedBackfillBatch closed sessions
 // per pass, until none is left.
-func (c *Controller) backfillEnded(ctx context.Context, orphans []string) {
+func (c *Controller) backfillEnded(ctx context.Context, orphans []string, tm *scanTimes, mark func(*time.Duration, string)) {
 	closed, err := c.store.List(ctx, store.Filter{Kind: domain.KindSession, Status: domain.StatusClosed, Limit: math.MaxInt32})
+	mark(&tm.ListClosed, "list_closed")
 	if err != nil {
 		return
 	}
+	defer mark(&tm.Backfill, "backfill")
 	n := 0
 	for _, t := range closed {
 		if slices.Contains(orphans, t.ID) {
@@ -84,7 +171,12 @@ func (c *Controller) backfillEnded(ctx context.Context, orphans []string) {
 			return
 		}
 		n++
+		tm.Filled++
+		start := c.now()
 		c.saveEnded(ctx, t.ID)
+		if took := c.since(start); took > tm.SlowestEnded {
+			tm.SlowestEnded, tm.SlowestEndedID = took, t.ID
+		}
 	}
 	c.sessScanMu.Lock()
 	c.endedFilled = true

@@ -227,6 +227,9 @@ type Controller struct {
 	sessOrphans []string
 	sessScanned bool
 	endedFilled bool
+	// scanHook, if set, runs at the end of each scan_sessions substep
+	// with its name (tests move a fake clock there, JOB-221).
+	scanHook func(substep string)
 	// gitMu serializes git commands on pool repos: concurrent fetches in
 	// one repo fail on the remote-ref lock.
 	gitMu    sync.Mutex
@@ -653,7 +656,6 @@ func (c *Controller) tick() {
 	c.step(ctx, "supervise", func(ctx context.Context) { c.supervise(ctx, cfg, lc.lease) })
 	c.passStep(ctx, cfg, "run_auto_steps", c.runAutoSteps)
 	c.passStep(ctx, cfg, "report_orphans", c.reportOrphans)
-	c.step(ctx, "scan_sessions", c.scanSessions)
 	c.passStep(ctx, cfg, "sweep_runs", c.sweepRuns)
 	c.kickHooks()
 	c.passStep(ctx, cfg, "sweep_derived", c.sweepDerived)
