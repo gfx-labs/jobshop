@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.33](https://github.com/gfx-labs/jobshop/compare/v0.10.32...v0.10.33) (2026-11-15)
+
+
+### Performance
+
+* **control:** move scan_sessions off the tick and time its substeps (JOB-221) ([#1264](https://github.com/gfx-labs/jobshop/issues/1264)) ([82fbf29](https://github.com/gfx-labs/jobshop/commit/82fbf29e30de88e0ddf1c679898a0b7ba7871f35))
+
 ## [0.10.32](https://github.com/gfx-labs/jobshop/compare/v0.10.31...v0.10.32) (2026-11-14)
 
 
