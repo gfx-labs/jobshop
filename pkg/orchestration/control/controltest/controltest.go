@@ -34,15 +34,11 @@ const DialWait = 30 * time.Second
 
 // NewRoot makes a temp controller root and writes cfg as its config,
 // with every $ROOT replaced by the root dir (for pool dirs). The dir is
-// short (os.MkdirTemp, not t.TempDir) because unix socket paths under it
+// short (ShortDir, not t.TempDir) because unix socket paths under it
 // are limited to 108 bytes.
 func NewRoot(t testing.TB, cfg string) config.Root {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "js")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	dir := ShortDir(t)
 	root := config.Root{Dir: dir}
 	WriteConfig(t, root, strings.ReplaceAll(cfg, "$ROOT", dir))
 	return root
