@@ -240,6 +240,12 @@ func (r *runner) newConversation(ctx context.Context, conn *acp.ClientSideConnec
 		return fmt.Errorf("session/new: %w", err)
 	}
 	summary, source := r.summarize(ctx)
+	return r.adoptConversation(ctx, fields, ns.SessionId, ns.ConfigOptions, summary, source)
+}
+
+// adoptConversation makes the new ACP session id the session's conversation
+// and queues summary, the earlier conversation's, for its first prompt.
+func (r *runner) adoptConversation(ctx context.Context, fields *domain.SessionFields, id acp.SessionId, opts []acp.SessionConfigOption, summary, source string) error {
 	if summary == "" {
 		r.log.WarnContext(ctx, "new conversation has no summary", "old", fields.ACPSession,
 			"reason", "no journal frames and no indexed summary")
@@ -247,10 +253,10 @@ func (r *runner) newConversation(ctx context.Context, conn *acp.ClientSideConnec
 	r.mu.Lock()
 	r.seed, r.seedDue = summary, true
 	r.mu.Unlock()
-	r.log.WarnContext(ctx, "started a new conversation", "old", fields.ACPSession, "new", ns.SessionId,
+	r.log.WarnContext(ctx, "started a new conversation", "old", fields.ACPSession, "new", id,
 		"path", "new+summary", "summary_bytes", len(summary), "summary_source", source)
-	fields.ACPSession = string(ns.SessionId)
-	noteAdvertised(fields, ns.ConfigOptions)
+	fields.ACPSession = string(id)
+	noteAdvertised(fields, opts)
 	r.setACPID(fields.ACPSession)
 	if err := r.saveFields(*fields); err != nil {
 		return err
@@ -765,30 +771,16 @@ func (r *runner) session() error {
 		}
 	case fresh:
 		r.setResumed()
-		loaded := false
-		if init.AgentCapabilities.LoadSession {
-			ls, err := conn.LoadSession(ctx, acp.LoadSessionRequest{
-				SessionId: acp.SessionId(fields.ACPSession), Cwd: cwd, McpServers: []acp.McpServer{},
-			})
-			switch {
-			case err == nil:
-				loaded = true
-				if err := r.c.updateSessionFields(ctx, r.id, func(f *domain.SessionFields) { noteAdvertised(f, ls.ConfigOptions) }); err != nil {
-					return err
-				}
-				r.log.InfoContext(r.ctx, "resumed conversation", "acp_session", fields.ACPSession, "path", "load")
-			case ctx.Err() != nil:
-				return r.dropped(conn)
-			default:
-				// A failed load would fail again on every respawn and end
-				// the session as crashed; a new conversation keeps going.
-				r.log.WarnContext(r.ctx, "session/load failed; falling back to a new conversation", "acp_session", fields.ACPSession, "err", err)
-			}
-		}
-		if !loaded {
-			if err := r.newConversation(ctx, conn, cwd, &fields); err != nil {
+		// acphost.Reopen decides between session/load and a new
+		// conversation (#1271).
+		initRaw := welcome.Initialize
+		if initRaw == nil {
+			if initRaw, err = json.Marshal(init); err != nil {
 				return err
 			}
+		}
+		if err := r.reopen(ctx, conn, initRaw, cwd, &fields); err != nil {
+			return err
 		}
 	}
 
