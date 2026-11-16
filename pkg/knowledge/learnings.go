@@ -400,8 +400,11 @@ func learningFromRecord(r store.Record) (domain.Learning, error) {
 // ExpireLearnings sets expired on the open learnings recorded before
 // cutoff that have no PR (JOB-198), and returns the ones it changed. scope
 // is exact and kind a name or glob; empty matches all. A learning that
-// gained a PR or left open since it was listed is skipped.
-func ExpireLearnings(ctx context.Context, st Store, cutoff time.Time, scope, kind string) ([]domain.Learning, error) {
+// gained a PR or left open since it was listed is skipped. keep, when set,
+// is called once with the candidates and returns the ids to leave open
+// (JOB-220: learnings an open issue or PR cites); its error stops the call
+// before anything changes.
+func ExpireLearnings(ctx context.Context, st Store, cutoff time.Time, scope, kind string, keep func(context.Context, []domain.Learning) (map[int64]bool, error)) ([]domain.Learning, error) {
 	rf := store.RecordFilter{Until: cutoff, States: []string{domain.LearningOpen}, Order: store.OrderCreatedDesc, Limit: all, Where: map[string]string{}}
 	if scope != "" {
 		rf.Where["scope"] = scope
@@ -413,13 +416,19 @@ func ExpireLearnings(ctx context.Context, st Store, cutoff time.Time, scope, kin
 	if err != nil {
 		return nil, err
 	}
+	var kept map[int64]bool
+	if keep != nil && len(cands) > 0 {
+		if kept, err = keep(ctx, cands); err != nil {
+			return nil, err
+		}
+	}
 	col, err := openLearnings(ctx, st)
 	if err != nil {
 		return nil, err
 	}
 	out := []domain.Learning{}
 	for _, l := range cands {
-		if l.PR != "" || (kind != "" && !domain.Glob(kind, l.Kind)) {
+		if l.PR != "" || kept[l.ID] || (kind != "" && !domain.Glob(kind, l.Kind)) {
 			continue
 		}
 		r, err := casUpdate(ctx, col, learningKey(l.ID), fmt.Sprintf("learning %d", l.ID), func(r *store.Record) error {

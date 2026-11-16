@@ -1,7 +1,10 @@
 package control
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/gfx-labs/jobshop/pkg/config"
 	"github.com/gfx-labs/jobshop/pkg/domain"
 	"github.com/gfx-labs/jobshop/pkg/knowledge"
 	"github.com/gfx-labs/jobshop/pkg/storage/store"
@@ -348,4 +352,98 @@ func TestLearnExpire(t *testing.T) {
 	_, err = c.learnExpire(ctx, sc, rpc.LearnExpireParams{OlderThan: time.Hour})
 	require.ErrorIs(t, err, rpc.ErrForbidden)
 	assert.Contains(t, ids(domain.LearningOpen), oldPR)
+}
+
+func TestCitedLearnings(t *testing.T) {
+	t.Parallel()
+	got := citedLearnings([]string{
+		"Curate: fix prompt\nLearnings 12, #14 and 15 show the wrong base.",
+		"learning ids 21 22; also learning: 30",
+		"no ids here, learning about 2 things",
+	})
+	assert.Equal(t, map[int64]bool{12: true, 14: true, 15: true, 21: true, 22: true, 30: true}, got)
+}
+
+func TestLearnExpireAuto(t *testing.T) {
+	t.Parallel()
+	c, clk, _ := scanController(t)
+	ctx := t.Context()
+	admin := scope{admin: true, actor: "admin"}
+	add := func(s string) int64 {
+		out, err := c.learnAdd(ctx, admin, rpc.LearnParams{Kind: domain.LearningFailure, Summary: s})
+		require.NoError(t, err)
+		return out.(domain.Learning).ID
+	}
+	old, cited, withPR := add("old"), add("cited"), add("with pr")
+	_, err := c.learnUpdate(ctx, admin, rpc.LearnUpdateParams{IDs: []int64{withPR}, PR: "https://github.com/acme/widget/pull/1"})
+	require.NoError(t, err)
+	clk.advance(10 * 24 * time.Hour)
+	fresh := add("fresh")
+	var asked []string
+	c.learnRefs = func(_ context.Context, _ *config.Config, repos []string) ([]string, error) {
+		asked = repos
+		return []string{fmt.Sprintf("Curate: x\nlearnings %d", cited)}, nil
+	}
+	status := func(id int64) string {
+		l, err := knowledge.GetLearning(ctx, c.store, id)
+		require.NoError(t, err)
+		return l.Status
+	}
+
+	// 10 days: nothing is old enough, and nothing is looked up.
+	c.expireLearnings(ctx, c.config())
+	assert.Nil(t, asked)
+	for _, id := range []int64{old, cited, withPR, fresh} {
+		assert.NotEqual(t, domain.LearningExpired, status(id))
+	}
+
+	// 15 days: the old one expires; the cited one, the one with a PR and
+	// the fresh one stay open.
+	clk.advance(5 * 24 * time.Hour)
+	c.expireLearnings(ctx, c.config())
+	assert.Equal(t, domain.LearningExpired, status(old))
+	assert.Equal(t, domain.LearningOpen, status(cited))
+	assert.Equal(t, domain.LearningOpen, status(withPR))
+	assert.Equal(t, domain.LearningOpen, status(fresh))
+
+	// Once the issue closes the learning is no longer cited.
+	c.learnRefs = func(context.Context, *config.Config, []string) ([]string, error) { return nil, nil }
+	c.expireLearnings(ctx, c.config()) // within the hour: no run
+	assert.Equal(t, domain.LearningOpen, status(cited))
+	clk.advance(2 * time.Hour)
+	c.expireLearnings(ctx, c.config())
+	assert.Equal(t, domain.LearningExpired, status(cited))
+	assert.Equal(t, domain.LearningOpen, status(fresh))
+}
+
+func TestLearnExpireAutoOff(t *testing.T) {
+	t.Parallel()
+	c, clk, _ := scanController(t)
+	ctx := t.Context()
+	out, err := c.learnAdd(ctx, scope{admin: true, actor: "admin"}, rpc.LearnParams{Kind: domain.LearningFailure, Summary: "old"})
+	require.NoError(t, err)
+	id := out.(domain.Learning).ID
+	clk.advance(365 * 24 * time.Hour)
+	c.learnRefs = func(context.Context, *config.Config, []string) ([]string, error) {
+		return nil, errors.New("looked up")
+	}
+	cfg := *c.config()
+	cfg.Learnings.ExpireAfter = "0"
+	c.expireLearnings(ctx, &cfg)
+	l, err := knowledge.GetLearning(ctx, c.store, id)
+	require.NoError(t, err)
+	assert.Equal(t, domain.LearningOpen, l.Status)
+
+	// A failed lookup expires nothing, and the next hour retries.
+	cfg.Learnings.ExpireAfter = ""
+	c.expireLearnings(ctx, &cfg)
+	l, err = knowledge.GetLearning(ctx, c.store, id)
+	require.NoError(t, err)
+	assert.Equal(t, domain.LearningOpen, l.Status)
+	c.learnRefs = func(context.Context, *config.Config, []string) ([]string, error) { return nil, nil }
+	clk.advance(2 * time.Hour)
+	c.expireLearnings(ctx, &cfg)
+	l, err = knowledge.GetLearning(ctx, c.store, id)
+	require.NoError(t, err)
+	assert.Equal(t, domain.LearningExpired, l.Status)
 }
