@@ -41,7 +41,11 @@ the ticket's `parent_id`): do not start a new branch. `gh pr checkout <n>`,
 address each finding, reply to each review comment you resolve, push and
 wait for green CI.
 
-Otherwise: take the issue: assign it to yourself and move it to In
+Otherwise, first read the controller's comment on this step
+(`jobshop ticket show`): "Open PR from another session already names
+{{.issue}}" or a merged PR in its list means it is not work for this
+run. The controller lists the PRs that name the issue when you claim the
+step and again when you comment your PR link. Then take the issue: assign it to yourself and move it to In
 Progress in one call
 (`jobshop linear assign {{.issue}} me --state "In Progress"`;
 if that state name is not one of the team's states, the error lists

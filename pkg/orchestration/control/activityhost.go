@@ -113,6 +113,11 @@ func (l *liveActivity) CommitPulls(ctx context.Context, repo, sha string) ([]int
 	return l.client(repo).CommitPulls(ctx, repo, sha)
 }
 
+// ListPulls lists the repo's recent PRs for the existing PR check (JOB-219).
+func (l *liveActivity) ListPulls(ctx context.Context, repo string) ([]github.PullSummary, error) {
+	return l.client(repo).ListPulls(ctx, repo)
+}
+
 func (l *liveActivity) client(repo string) *github.Client {
 	return l.c.githubOrHost(l.c.config(), "", repo)
 }

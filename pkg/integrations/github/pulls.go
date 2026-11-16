@@ -120,3 +120,115 @@ func RevertedPR(ctx context.Context, src PullSource, repo string, pr Pull) (Pull
 	}
 	return Pull{}, nil
 }
+
+// PullSummary is one entry of GET /repos/{r}/pulls: what finding the PRs
+// that name an issue reads (JOB-219).
+type PullSummary struct {
+	Number  int
+	Title   string
+	Body    string
+	URL     string
+	Head    string // branch name
+	Open    bool
+	Merged  bool
+	Author  string
+	Updated string
+}
+
+// PullLister lists a repo's recent PRs, newest update first, open, merged
+// and closed alike. Client implements it; tests replace it.
+type PullLister interface {
+	ListPulls(ctx context.Context, repo string) ([]PullSummary, error)
+}
+
+var _ PullLister = (*Client)(nil)
+
+// listPullPages bounds ListPulls: 3 pages of 100 reach back several days of
+// merges on a busy repo, which is the window a duplicate happens in.
+const listPullPages = 3
+
+// ListPulls reads the most recently updated PRs of repo.
+func (c *Client) ListPulls(ctx context.Context, repo string) ([]PullSummary, error) {
+	var out []PullSummary
+	for page := 1; page <= listPullPages; page++ {
+		resp, err := c.Do(ctx, Request{
+			Path:  fmt.Sprintf("/repos/%s/pulls", repo),
+			Query: url.Values{"state": {"all"}, "sort": {"updated"}, "direction": {"desc"}, "per_page": {"100"}, "page": {strconv.Itoa(page)}},
+			Route: pullRoute,
+		})
+		if err != nil {
+			return nil, err
+		}
+		var rows []struct {
+			Number    int    `json:"number"`
+			Title     string `json:"title"`
+			Body      string `json:"body"`
+			HTMLURL   string `json:"html_url"`
+			State     string `json:"state"`
+			MergedAt  string `json:"merged_at"`
+			UpdatedAt string `json:"updated_at"`
+			Head      struct {
+				Ref string `json:"ref"`
+			} `json:"head"`
+			User struct {
+				Login string `json:"login"`
+			} `json:"user"`
+		}
+		if err := json.Unmarshal(resp.Body, &rows); err != nil {
+			return nil, err
+		}
+		for _, r := range rows {
+			out = append(out, PullSummary{
+				Number: r.Number, Title: r.Title, Body: r.Body, URL: r.HTMLURL, Head: r.Head.Ref,
+				Open: r.State == "open", Merged: r.MergedAt != "", Author: r.User.Login, Updated: r.UpdatedAt,
+			})
+		}
+		if len(rows) < 100 {
+			break
+		}
+	}
+	return out, nil
+}
+
+// IssueRef names an issue a PR can work on: a GitHub issue number in Repo,
+// or a Linear key.
+type IssueRef struct {
+	Repo   string
+	Number int    // GitHub issue; zero with a Linear key
+	Key    string // Linear key such as JOB-219
+}
+
+func (r IssueRef) String() string {
+	if r.Key != "" {
+		return r.Key
+	}
+	return "#" + strconv.Itoa(r.Number)
+}
+
+// closesRef is the body wording that links a PR to an issue. The issue
+// number follows, with an optional owner/name.
+const closesRef = `(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|part of)\s*:?\s+`
+
+// NamesIssue reports whether p works on ref. GitHub: the body says
+// Closes/Fixes/Resolves/Part of #n, the title ends in (#n), or the branch is
+// issue-n or issue-n-slug. Linear: the key is in the title or the branch.
+// Closed PRs that were not merged are the caller's to drop.
+func NamesIssue(p PullSummary, ref IssueRef) bool {
+	if ref.Key != "" {
+		re, err := regexp.Compile(`(?i)(?:^|[^a-z0-9])` + regexp.QuoteMeta(ref.Key) + `(?:[^0-9]|$)`)
+		return err == nil && (re.MatchString(p.Title) || re.MatchString(p.Head))
+	}
+	if ref.Number <= 0 || p.Number == ref.Number {
+		return false
+	}
+	n := strconv.Itoa(ref.Number)
+	if strings.Contains(p.Title, "(#"+n+")") {
+		return true
+	}
+	if p.Head == "issue-"+n || strings.HasPrefix(p.Head, "issue-"+n+"-") {
+		return true
+	}
+	repo := `(?:` + regexp.QuoteMeta(ref.Repo) + `)?`
+	re, err := regexp.Compile(closesRef + repo + `#` + n + `\b`)
+	return err == nil && re.MatchString(p.Body)
+}

@@ -34,11 +34,13 @@ separate command, confirm `git rev-parse HEAD` equals the PR's
 address each finding, reply to each review comment you resolve, push and
 wait for green CI.
 
-Otherwise, first `gh pr list --state all --search {{.issue}}` and read
-the issue's comments: an open or merged PR from another run (a
-`ci-repair` fix step names its run on the issue) means it is not work
-for this run.
-Run the search again right before you push. Then
+Otherwise, first read the controller's comment on this step
+(`jobshop ticket show`): "Open PR from another session already names
+#{{.issue}}" or a merged PR in its list, like a PR from another run (a
+`ci-repair` fix step names its run on the issue) in the issue's
+comments, means it is not work for this run. The controller lists the
+PRs that name the issue when you claim the step and again when you
+comment your PR link; do not search by hand. Then
 `git switch -c issue-{{.issue}}`, make the change, run
 `{{.check_cmd}}`, commit with
 `(#{{.issue}})` in the subject, `git push -u origin HEAD`, then
