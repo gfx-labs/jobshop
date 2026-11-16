@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/gfx-labs/jobshop/pkg/domain"
+	"github.com/gfx-labs/jobshop/pkg/orchestration/control/controltest"
 	"github.com/gfx-labs/jobshop/pkg/storage/store"
 	"github.com/gfx-labs/jobshop/pkg/support/redact"
 	"github.com/gfx-labs/jobshop/pkg/transport/rpc"
@@ -143,7 +144,7 @@ type fakeController struct {
 
 func (f *fakeController) serve(t *testing.T) string {
 	t.Helper()
-	sock := filepath.Join(t.TempDir(), "s")
+	sock := filepath.Join(controltest.ShortDir(t), "s")
 	ln, err := net.Listen("unix", sock)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = ln.Close() })

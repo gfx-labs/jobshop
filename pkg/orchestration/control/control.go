@@ -185,6 +185,11 @@ type Controller struct {
 	syncPrunedAt time.Time
 	// artifactsPrunedAt is the last attachment prune (#508); housekeeping-only state.
 	artifactsPrunedAt time.Time
+	// learnExpiredAt is the last automatic learning expiry (JOB-220);
+	// housekeeping-only state. learnRefs reads the text of open issues and
+	// PRs of repos for it; nil means GitHub.
+	learnExpiredAt time.Time
+	learnRefs      func(ctx context.Context, cfg *config.Config, repos []string) ([]string, error)
 	// slotClient is the resource provider client (#407); see slots().
 	slotClient *slotprovider.Client
 	slotsOnce  sync.Once

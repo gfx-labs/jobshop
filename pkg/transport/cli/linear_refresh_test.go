@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/gfx-labs/jobshop/pkg/orchestration/control/controltest"
 	"github.com/gfx-labs/jobshop/pkg/transport/rpc"
 )
 
@@ -53,7 +54,7 @@ func (a *linearApp) otherMinter() {
 
 func (a *linearApp) serveController(t *testing.T) string {
 	t.Helper()
-	sock := filepath.Join(t.TempDir(), "s")
+	sock := filepath.Join(controltest.ShortDir(t), "s")
 	ln, err := net.Listen("unix", sock)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = ln.Close() })
