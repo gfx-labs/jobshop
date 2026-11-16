@@ -9,6 +9,10 @@ covered in `tick-latency.md`.
    attributes `jobshop.tick.*` on that tick's `supervisor tick` span, next to
    its `tick <step>` children and the `store.*` spans of calls over 50ms.
    A healthy instance logs none.
+   To see the current numbers without waiting for a slow one, run
+   `jobshop system status` from the admin socket (JOB-218): `tick_seconds`,
+   `p95_seconds` over `samples` passes and `steps`, seconds per step of the
+   last pass. A pool session needs the `pool-list` admin grant for it.
 2. **Read `hints`.**
    - `process_stalled`: the stall monitor ran 40ms or more late during the
      tick (`stalls`, `stall_max_seconds`), so the whole process was not
