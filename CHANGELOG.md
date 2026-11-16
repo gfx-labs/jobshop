@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.10.34](https://github.com/gfx-labs/jobshop/compare/v0.10.33...v0.10.34) (2026-11-16)
+
+
+### Features
+
+* **cli:** add system status command (JOB-218) ([#1268](https://github.com/gfx-labs/jobshop/issues/1268)) ([6114fd2](https://github.com/gfx-labs/jobshop/commit/6114fd2ad20d8dcb912c131ac13ce95db1b6f9c1))
+* **control:** comment existing PRs on implement steps (JOB-219) ([#1269](https://github.com/gfx-labs/jobshop/issues/1269)) ([7b72f2a](https://github.com/gfx-labs/jobshop/commit/7b72f2a8ae188fe7586028590437ee5a920d2f56))
+* **control:** expire old open learnings from housekeeping (JOB-220) ([#1267](https://github.com/gfx-labs/jobshop/issues/1267)) ([63d2770](https://github.com/gfx-labs/jobshop/commit/63d27704fa50f940dc07a9a6798e3ed9cf71f522))
+
 ## [0.10.33](https://github.com/gfx-labs/jobshop/compare/v0.10.32...v0.10.33) (2026-11-15)
 
 
