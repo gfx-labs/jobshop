@@ -27,8 +27,10 @@ There are two kinds of edit (#592):
    an edit already rejected or restored, or the same rule in other words.
 3. Gather the rest: open learnings with no `pr`, plus recent outcomes
    (`jobshop run list`, failed or needs_human runs and their step
-   comments). Learnings with status `expired` (an operator ran `jobshop
-   learn expire` on old ones nobody addressed) are not open: do not list or
+   comments). Learnings with status `expired` (the controller expires open
+   ones after `learnings.expire_after`, 14d, unless an open issue or PR
+   names their id, so name ids in the issue and PR of a prompt fix; an
+   operator can also run `jobshop learn expire`) are not open: do not list or
    gather them. `--status expired` shows them if a recurring problem needs
    its history. Group learnings that describe the same problem. A learning
    with `duplicates: N` in `learn list` stands for a group of N+1: its

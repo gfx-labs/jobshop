@@ -364,6 +364,10 @@ type LearningsConfig struct {
 	// path.Match globs (review-*, *). Packs add to the list. Empty: the
 	// defaults, correction, failure and workaround.
 	Kinds []string `yaml:"kinds,omitempty"`
+	// ExpireAfter expires open learnings older than this (Go duration or
+	// Nd) that have no PR and that no open issue or PR cites (JOB-220).
+	// Default 14d; "0" turns it off.
+	ExpireAfter string `yaml:"expire_after,omitempty"`
 }
 
 // LearningKinds is the resolved kind patterns: Learnings.Kinds, or the
@@ -373,6 +377,23 @@ func (c *Config) LearningKinds() []string {
 		return domain.LearningKinds
 	}
 	return c.Learnings.Kinds
+}
+
+// DefaultLearningExpireAfter is the age at which an open learning expires.
+const DefaultLearningExpireAfter = 14 * 24 * time.Hour
+
+// LearningExpireAfter is Learnings.ExpireAfter parsed: the default when
+// unset, 0 when turned off.
+func (c *Config) LearningExpireAfter() time.Duration {
+	s := strings.TrimSpace(c.Learnings.ExpireAfter)
+	if s == "" {
+		return DefaultLearningExpireAfter
+	}
+	d, err := parseDays(s)
+	if err != nil || d < 0 {
+		return DefaultLearningExpireAfter
+	}
+	return d
 }
 
 // HasConditions reports whether w has any condition a poll evaluates.
@@ -1849,6 +1870,11 @@ func parse(b []byte, sources map[string][]string) (*Config, error) {
 	for _, k := range c.Learnings.Kinds {
 		if err := domain.ValidKindPattern(k); err != nil {
 			return nil, fmt.Errorf("%s: learnings.kinds: %w", FileName, err)
+		}
+	}
+	if s := strings.TrimSpace(c.Learnings.ExpireAfter); s != "" {
+		if d, err := parseDays(s); err != nil || d < 0 {
+			return nil, fmt.Errorf("%s: learnings.expire_after %q must be a duration (30m, 14d) or 0", FileName, s)
 		}
 	}
 	if err := c.checkResources(); err != nil {

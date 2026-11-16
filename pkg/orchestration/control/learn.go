@@ -195,7 +195,7 @@ func (c *Controller) learnExpire(ctx context.Context, sc scope, p rpc.LearnExpir
 		}
 		scopeName = s
 	}
-	ls, err := knowledge.ExpireLearnings(ctx, c.store, c.now().Add(-p.OlderThan), scopeName, p.Kind)
+	ls, err := knowledge.ExpireLearnings(ctx, c.store, c.now().Add(-p.OlderThan), scopeName, p.Kind, nil)
 	if err != nil {
 		return nil, err
 	}
