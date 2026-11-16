@@ -453,6 +453,12 @@ Commands:
   journal backfill [flags]
     Ship existing journals to VictoriaLogs from their cursors now (admin).
 
+  system status
+    Print the controller's supervisor pass timings as JSON: last_tick,
+    tick_seconds, steps (seconds per step), p95_seconds and samples over the
+    last 60 passes. Needs the admin socket or the pool-list grant; a session
+    without it gets a grant error.
+
   whoami [flags]
     Show the caller's scope.
 
@@ -4570,6 +4576,50 @@ Flags:
 
       --since=DURATION    Only sessions closed this recently, e.g. 168h (open
                           sessions always). Default: all.
+```
+
+## jobshop system
+
+```
+Usage: jobshop system <command> [flags]
+
+Controller status: supervisor pass timings (admin or pool-list grant).
+
+Flags:
+  -h, --help             Show context-sensitive help.
+      --root=STRING      Jobshop root directory (holds jobshop.yaml,
+                         the database, sockets and sessions). Default:
+                         nearest ancestor of the cwd containing jobshop.yaml
+                         ($JOBSHOP_ROOT).
+      --socket=STRING    Socket to talk to. Defaults to the session CLI socket,
+                         else the root's admin socket ($JOBSHOP_SOCKET).
+
+Commands:
+  system status
+    Print the controller's supervisor pass timings as JSON: last_tick,
+    tick_seconds, steps (seconds per step), p95_seconds and samples over the
+    last 60 passes. Needs the admin socket or the pool-list grant; a session
+    without it gets a grant error.
+```
+
+## jobshop system status
+
+```
+Usage: jobshop system status
+
+Print the controller's supervisor pass timings as JSON: last_tick, tick_seconds,
+steps (seconds per step), p95_seconds and samples over the last 60 passes.
+Needs the admin socket or the pool-list grant; a session without it gets a grant
+error.
+
+Flags:
+  -h, --help             Show context-sensitive help.
+      --root=STRING      Jobshop root directory (holds jobshop.yaml,
+                         the database, sockets and sessions). Default:
+                         nearest ancestor of the cwd containing jobshop.yaml
+                         ($JOBSHOP_ROOT).
+      --socket=STRING    Socket to talk to. Defaults to the session CLI socket,
+                         else the root's admin socket ($JOBSHOP_SOCKET).
 ```
 
 ## jobshop whoami
