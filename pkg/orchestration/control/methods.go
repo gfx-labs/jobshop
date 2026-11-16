@@ -416,6 +416,9 @@ func (c *Controller) closeTicketIn(ctx context.Context, cfg *config.Config, sc s
 			return c.store.Get(ctx, id)
 		}
 	}
+	if p.Outcome == "pr" && p.Resolution == "done" {
+		c.noteExistingPRs(ctx, cur, false) // JOB-219: the step is recording its PR
+	}
 	t, err := c.store.Release(ctx, sc.actor, id, cl, store.Outcome{Close: p.Resolution, StepResult: result})
 	if err != nil {
 		return nil, err
@@ -500,7 +503,14 @@ func (c *Controller) comment(ctx context.Context, sc scope, p rpc.CommentParams)
 		return nil, err
 	}
 	c.redactWrite(sc, "comment on", id, &p.Body)
-	return store.AddComment(ctx, c.store, sc.actor, id, p.Body)
+	cm, err := store.AddComment(ctx, c.store, sc.actor, id, p.Body)
+	if err != nil {
+		return nil, err
+	}
+	if t, gerr := c.store.Get(ctx, id); gerr == nil {
+		c.notePRRecorded(ctx, t, p.Body) // JOB-219
+	}
+	return cm, nil
 }
 
 func (c *Controller) edgeAdd(ctx context.Context, sc scope, p rpc.EdgeParams) (any, error) {
@@ -586,6 +596,7 @@ func (c *Controller) claim(ctx context.Context, sc scope, p rpc.ClaimParams) (an
 	}
 	c.metrics.Claims.Add(ctx, 1, metric.WithAttributes(telemetry.AttrPool.String(r.Ticket.Pool)))
 	if r.Ticket.Kind == domain.KindStep && r.Ticket.ParentID != "" {
+		c.noteExistingPRs(ctx, r.Ticket, true)  // JOB-219
 		c.runBatchEvent(ctx, r.Ticket.ParentID) // a batch is running once a member step is claimed
 	}
 	return r, nil

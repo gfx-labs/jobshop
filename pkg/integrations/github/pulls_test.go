@@ -98,3 +98,61 @@ func TestRevertedPRByCommit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 3, got.Number, "skips the reverting PR and matches the merge commit prefix")
 }
+
+func TestNamesIssue(t *testing.T) {
+	t.Parallel()
+	gh := github.IssueRef{Repo: "gfx-labs/jobshop", Number: 1251}
+	lin := github.IssueRef{Key: "JOB-219"}
+	for _, tc := range []struct {
+		name string
+		p    github.PullSummary
+		ref  github.IssueRef
+		want bool
+	}{
+		{"title suffix", github.PullSummary{Number: 5, Title: "fix: x (#1251)"}, gh, true},
+		{"branch", github.PullSummary{Number: 5, Head: "issue-1251"}, gh, true},
+		{"branch slug", github.PullSummary{Number: 5, Head: "issue-1251-recall"}, gh, true},
+		{"branch of a longer number", github.PullSummary{Number: 5, Head: "issue-12510"}, gh, false},
+		{"closes", github.PullSummary{Number: 5, Body: "Closes #1251. More."}, gh, true},
+		{"fixes qualified", github.PullSummary{Number: 5, Body: "fixes gfx-labs/jobshop#1251"}, gh, true},
+		{"part of", github.PullSummary{Number: 5, Body: "Part of #1251"}, gh, true},
+		{"longer number", github.PullSummary{Number: 5, Body: "Closes #12510"}, gh, false},
+		{"plain mention", github.PullSummary{Number: 5, Body: "see #1251"}, gh, false},
+		{"other repo", github.PullSummary{Number: 5, Body: "Closes other/repo#1251"}, gh, false},
+		{"linear title", github.PullSummary{Number: 5, Title: "feat: x (JOB-219)"}, lin, true},
+		{"linear branch lower case", github.PullSummary{Number: 5, Head: "issue-job-219"}, lin, true},
+		{"linear longer key", github.PullSummary{Number: 5, Title: "x (JOB-2190)", Head: "issue-JOB-2191"}, lin, false},
+		{"linear body only", github.PullSummary{Number: 5, Body: "Fixes JOB-219"}, lin, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := github.NamesIssue(tc.p, tc.ref); got != tc.want {
+				t.Fatalf("NamesIssue = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestListPulls(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/repos/o/r/pulls" || r.URL.Query().Get("state") != "all" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = io.WriteString(w, `[
+			{"number":3,"title":"a (#1)","body":"Closes #1","html_url":"u3","state":"open","merged_at":null,"head":{"ref":"issue-1"},"user":{"login":"bot"}},
+			{"number":2,"title":"b","html_url":"u2","state":"closed","merged_at":"2026-11-01T00:00:00Z","head":{"ref":"x"},"user":{"login":"me"}}]`)
+	}))
+	defer srv.Close()
+	cl := github.New(srv.URL, apicall.Static("tok"))
+
+	got, err := cl.ListPulls(t.Context(), "o/r")
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.True(t, got[0].Open)
+	assert.False(t, got[0].Merged)
+	assert.Equal(t, "issue-1", got[0].Head)
+	assert.False(t, got[1].Open)
+	assert.True(t, got[1].Merged)
+}
