@@ -14,6 +14,14 @@ const optimizeSQL = "PRAGMA optimize=0x10002"
 // once; the controller repeats it on a slow interval so a collection that
 // grew since is analyzed too.
 func (s *Store) Maintain(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, optimizeSQL)
+	h := s.wlog.begin(ctx)
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+	h.acquired()
+	defer h.release()
+	_, err = conn.ExecContext(ctx, optimizeSQL)
 	return err
 }

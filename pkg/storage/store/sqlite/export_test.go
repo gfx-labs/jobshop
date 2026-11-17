@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/pressly/goose/v3"
 
@@ -75,3 +76,7 @@ func TicketListSQL(s *Store, f store.Filter) (string, []any, error) {
 	}
 	return s.render(q)
 }
+
+// SetWriterClock replaces the clock of the writer log, so a test controls
+// the waits and holds it records.
+func SetWriterClock(s *Store, now func() time.Time) { s.wlog.nowFunc = now }

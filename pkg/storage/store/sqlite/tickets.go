@@ -61,6 +61,8 @@ type Store struct {
 	base      func() time.Time // the clock before Floor
 	prefix    func(string) string
 	commit    func()
+	// wlog records who queues for and holds the writer (#1273).
+	wlog writerLog
 }
 
 var _ store.Store = (*Store)(nil)
@@ -155,10 +157,14 @@ func (s *Store) isBusy(err error) bool {
 }
 
 func (s *Store) txOnce(ctx context.Context, fn func(tx *sql.Tx) error) error {
+	h := s.wlog.begin(ctx)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
+	h.acquired()
+	// Runs after the rollback below, so the hold covers the whole use.
+	defer h.release()
 	defer func() { _ = tx.Rollback() }()
 	if err := fn(tx); err != nil {
 		return err
@@ -901,6 +907,18 @@ func (s *Store) releaseHolder(ctx context.Context, actor, holder, reason string)
 // the expiry, so a lease renewed after the list was read is kept.
 func (s *Store) sweepLeases(ctx context.Context, actor string) ([]string, error) {
 	now := s.now()
+	// The supervisor sweeps every tick and almost always finds nothing.
+	// Look on the reader first: opening a write transaction to find
+	// nothing queued every tick behind whatever else held the writer
+	// (25s in one slow tick, #1273). A lease that expires just after the
+	// read is swept next tick.
+	due, err := s.rq.ExpiredLeases(ctx, ns(now))
+	if err != nil {
+		return nil, err
+	}
+	if len(due) == 0 {
+		return nil, nil
+	}
 	return s.reopenAll(ctx, actor, "lease_expired",
 		func(q sqldb.Querier) ([]string, error) { return q.ExpiredLeases(ctx, ns(now)) }, nil,
 		func(ctx context.Context, q sqldb.Querier, t domain.Ticket, prev int64, at time.Time) (int64, error) {
