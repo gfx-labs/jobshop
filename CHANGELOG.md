@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.35](https://github.com/gfx-labs/jobshop/compare/v0.10.34...v0.10.35) (2026-11-17)
+
+
+### Bug fixes
+
+* **control:** skip the writer in an idle lease sweep, name writer holders in slow ticks ([#1273](https://github.com/gfx-labs/jobshop/issues/1273)) ([#1274](https://github.com/gfx-labs/jobshop/issues/1274)) ([ad0b218](https://github.com/gfx-labs/jobshop/commit/ad0b218ffd883c85fce514446c6b33645c6f358e))
+
 ## [0.10.34](https://github.com/gfx-labs/jobshop/compare/v0.10.33...v0.10.34) (2026-11-16)
 
 
