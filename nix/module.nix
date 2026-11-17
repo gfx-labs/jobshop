@@ -306,7 +306,7 @@ let
   # The user comes from the pool's own isolation or the last of its
   # isolation.profiles that sets one (JOB-83). Pools that get theirs from a
   # label rule or a pack are not checked here: the controller quarantines
-  # them at the first spawn instead.
+  # them at start and on reload instead (preflight, #728, JOB-226).
   isoUser =
     p:
     let
