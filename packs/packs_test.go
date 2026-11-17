@@ -51,6 +51,9 @@ func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		]`
 	case r.URL.Path == "/repos/acme/widget/pulls":
 		body = `[]`
+	case r.URL.Path == "/repos/acme/widget/commits/master":
+		// Recent, so no_merge stays quiet.
+		body = `{"sha":"0123456789abcdef","commit":{"committer":{"date":"2026-11-04T11:00:00Z"}}}`
 	case r.URL.Path == "/repos/acme/widget/issues/7":
 		body = `{"number":7,"title":"Add a thing"}`
 	case r.URL.Path == "/repos/acme/gizmo/issues/5":

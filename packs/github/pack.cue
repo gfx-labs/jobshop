@@ -183,7 +183,7 @@ package github
 				{
 					signal: "no_merge"
 					script: "\(V.asset_prefix)triggers.star:no_merge"
-					args:   _github
+					args:   {repo: V.repo, ci_branch: V.ci_branch, skip_labels: V.pr_review_skip_labels, release_pr_label: V.release_pr_label}
 				},
 			]
 			run: {workflow: "triage", vars: {signal: "{{.signal}}", subject: "{{.subject}}", detail: "{{.detail}}"}}

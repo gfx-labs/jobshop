@@ -71,15 +71,25 @@ def issue_no_run(args):
         out[str(issue["number"])] = "open, no run"
     return out
 
-# no_merge: open PRs but no commit on the CI branch for 6 hours.
+# no_merge: open PRs but no commit on the CI branch for 6 hours. A release
+# PR, a draft and a PR with a skip label are not work waiting to merge, as
+# in pr_unmerged, so they do not count as open.
 def no_merge(args):
-    if not github.get("/repos/" + args["repo"] + "/pulls", params = {"state": "open", "per_page": "1"}).json():
-        return {}
     commit = github.get("/repos/" + args["repo"] + "/commits/" + args["ci_branch"]).json()
     date = commit["commit"]["committer"]["date"]
     if not older_than(date, "6h"):
         return {}
-    return {commit["sha"][:12]: "last commit " + date}
+    skip_labels = listed(args["skip_labels"])
+    release = args["release_pr_label"].lower()
+    for pr in _open_prs(args["repo"]):
+        if pr["isDraft"]:
+            continue
+        if [label for label in pr["labels"] if label in skip_labels]:
+            continue
+        if release and release in pr["labels"]:
+            continue
+        return {commit["sha"][:12]: "last commit " + date}
+    return {}
 
 # pr_unmerged: green, non-draft PRs untouched for 2 hours, other than the
 # human's, skipped authors and labels, and release PRs.
