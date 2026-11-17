@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/gfx-labs/jobshop/pkg/config"
+	"github.com/gfx-labs/jobshop/pkg/storage/store"
 	"github.com/gfx-labs/jobshop/pkg/support/telemetry"
 )
 
@@ -102,6 +103,8 @@ func (c *Controller) lockSpanFloor() time.Duration {
 // spans below it nest under the step.
 func (c *Controller) step(ctx context.Context, name string, fn func(ctx context.Context)) {
 	ctx, span := telemetry.StartSpan(ctx, "tick "+name, attribute.String("jobshop.tick.step", name))
+	// The store names the step in its writer log (#1273).
+	ctx = store.WithStep(ctx, name)
 	start := time.Now()
 	defer func() {
 		c.metrics.SinceStep(ctx, name, start)

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -87,6 +88,47 @@ func TestTickProbeReport(t *testing.T) {
 	assert.ElementsMatch(t, []string{
 		"process_stalled", "cpu_pressure", "cgroup_throttled", "db_file_written", "writer_queue", "housekeeping:maintain_store",
 	}, r.Hints)
+}
+
+// TestTickProbeWriter (#1273): a slow tick names the slowest store call of
+// its slowest step and what held the writer, and the longest holders.
+func TestTickProbeWriter(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := newTickProbe(time.Second, filepath.Join(dir, "db"), nil)
+	p.proc = filepath.Join(dir, "proc")
+	a := p.snap()
+	b := a
+	b.at = a.at.Add(26 * time.Second)
+	at := func(d time.Duration) time.Time { return a.at.Add(d) }
+	p.writers = func() []sqlite.WriterCall {
+		return []sqlite.WriterCall{
+			{Step: "supervise", Op: "Update", Start: at(-time.Hour), Wait: time.Second, Hold: time.Second}, // before the tick
+			{Step: "supervise", Op: "Claim", Start: at(0), Hold: 20 * time.Second},
+			{Step: "sweep", Op: "Expire", Start: at(time.Second), Wait: 19 * time.Second, Hold: 5 * time.Millisecond, BlockedBy: "supervise/Claim"},
+			{Step: "sweep_runs", Op: "Update", Start: at(22 * time.Second), Wait: time.Second, Hold: time.Second},
+		}
+	}
+	r := p.report(a, b, map[string]float64{"sweep": 24.9, "supervise": 20.1, "sweep_runs": 2})
+	require.Equal(t, "sweep", r.SlowestStep)
+	require.NotNil(t, r.SlowCall)
+	assert.Equal(t, "sweep/Expire", r.SlowCall.Label())
+	assert.Equal(t, "supervise/Claim", r.SlowCall.BlockedBy)
+	assert.Equal(t, []string{"supervise/Claim=20.000", "sweep_runs/Update=1.000", "sweep/Expire=0.005"}, r.Holders)
+
+	var out strings.Builder
+	for _, kv := range r.attrs() {
+		out.WriteString(string(kv.Key) + "=" + kv.Value.String() + "\n")
+	}
+	assert.Contains(t, out.String(), "jobshop.tick.slowest_call=sweep/Expire")
+	assert.Contains(t, out.String(), "jobshop.tick.slowest_call_wait_seconds=19")
+	assert.Contains(t, out.String(), "jobshop.tick.slowest_call_blocked_by=supervise/Claim")
+	assert.Contains(t, out.String(), "jobshop.tick.writer_holders=")
+
+	// A slowest step that made no writer call falls back to the slowest call.
+	r = p.report(a, b, map[string]float64{"probe_outages": 30})
+	require.NotNil(t, r.SlowCall)
+	assert.Equal(t, "supervise/Claim", r.SlowCall.Label())
 }
 
 // TestSlowTickLogged (JOB-212): a pass at or over the threshold logs one

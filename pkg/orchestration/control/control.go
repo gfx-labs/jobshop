@@ -415,6 +415,7 @@ func Run(ctx context.Context, root config.Root, opt Options) error {
 	probe := newTickProbe(opt.SlowTick, "", nil)
 	if ss, ok := st.(*sqlite.Store); ok {
 		probe.dbPath, probe.pool = root.DB(), ss.PoolWaits
+		probe.writers = ss.WriterCalls
 	}
 	// Calls over store.SlowCall add a span under the step that made them
 	// (JOB-105).

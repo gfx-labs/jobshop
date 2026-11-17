@@ -1,6 +1,7 @@
 package control
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -80,6 +81,9 @@ type tickProbe struct {
 	cgroupDir string
 	dbPath    string                            // "" for a store that is not a file
 	pool      func() map[string]sqlite.PoolWait // nil for Postgres
+	// writers lists the recent uses of the SQLite writer (#1273); nil for
+	// Postgres.
+	writers func() []sqlite.WriterCall
 
 	mu     sync.Mutex
 	stalls []stall
@@ -266,7 +270,14 @@ type tickReport struct {
 	Pool map[string]sqlite.PoolWait
 	// Housekeeping names the steps that ran during the tick.
 	Housekeeping []string
-	Hints        []string
+	// SlowCall is the store call that spent longest queued for and holding
+	// the writer, among the slowest step's calls when it made any (#1273).
+	// BlockedBy on it names what held the writer when it began to queue.
+	SlowCall *sqlite.WriterCall
+	// Holders are the operations that held the writer during the tick,
+	// longest first, as "step/op=seconds".
+	Holders []string
+	Hints   []string
 }
 
 // report diffs the two snapshots. steps is the tick's seconds per step.
@@ -313,8 +324,71 @@ func (p *tickProbe) report(a, b probeSnap, steps map[string]float64) tickReport 
 		r.Housekeeping = append(r.Housekeeping, h.name)
 	}
 	p.mu.Unlock()
+	r.SlowCall, r.Holders = p.writerEvidence(a.at, b.at, r.SlowestStep)
 	r.Hints = hints(r, d)
 	return r
+}
+
+// holdersKept is how many holders a report names.
+const holdersKept = 5
+
+// writerEvidence picks the slowest writer call and the longest holders
+// among the calls that overlap [from, to].
+func (p *tickProbe) writerEvidence(from, to time.Time, step string) (*sqlite.WriterCall, []string) {
+	if p.writers == nil {
+		return nil, nil
+	}
+	var calls []sqlite.WriterCall
+	for _, c := range p.writers() {
+		if !c.End().Before(from) && !c.Start.After(to) {
+			calls = append(calls, c)
+		}
+	}
+	if len(calls) == 0 {
+		return nil, nil
+	}
+	pick := func(only string) *sqlite.WriterCall {
+		var best *sqlite.WriterCall
+		for i, c := range calls {
+			if only != "" && c.Step != only {
+				continue
+			}
+			if best == nil || c.Wait+c.Hold > best.Wait+best.Hold {
+				best = &calls[i]
+			}
+		}
+		return best
+	}
+	slowest := pick(step)
+	if slowest == nil {
+		slowest = pick("")
+	}
+	held := map[string]time.Duration{}
+	for _, c := range calls {
+		// Only the time inside the tick counts.
+		s, e := c.Start.Add(c.Wait), c.End()
+		if s.Before(from) {
+			s = from
+		}
+		if e.After(to) {
+			e = to
+		}
+		if e.After(s) {
+			held[c.Label()] += e.Sub(s)
+		}
+	}
+	names := slices.SortedFunc(maps.Keys(held), func(x, y string) int {
+		if c := cmp.Compare(held[y], held[x]); c != 0 {
+			return c
+		}
+		return cmp.Compare(x, y)
+	})
+	names = names[:min(len(names), holdersKept)]
+	holders := make([]string, len(names))
+	for i, n := range names {
+		holders[i] = fmt.Sprintf("%s=%.3f", n, held[n].Seconds())
+	}
+	return slowest, holders
 }
 
 // hints names each candidate cause the evidence supports, so a reader
@@ -370,6 +444,16 @@ func (r tickReport) attrs() []attribute.KeyValue {
 		attribute.Int64("jobshop.tick.wal_bytes", r.WALBytes),
 		attribute.Int64("jobshop.tick.wal_delta_bytes", r.WALDelta),
 		attribute.StringSlice("jobshop.tick.hints", r.Hints),
+	}
+	if c := r.SlowCall; c != nil {
+		a = append(a,
+			attribute.String("jobshop.tick.slowest_call", c.Label()),
+			attribute.Float64("jobshop.tick.slowest_call_wait_seconds", c.Wait.Seconds()),
+			attribute.Float64("jobshop.tick.slowest_call_hold_seconds", c.Hold.Seconds()),
+			attribute.String("jobshop.tick.slowest_call_blocked_by", c.BlockedBy))
+	}
+	if len(r.Holders) > 0 {
+		a = append(a, attribute.StringSlice("jobshop.tick.writer_holders", r.Holders))
 	}
 	for _, k := range slices.Sorted(maps.Keys(r.PSI)) {
 		a = append(a, attribute.Float64("jobshop.tick.psi_"+k+"_seconds", r.PSI[k].Seconds()))
