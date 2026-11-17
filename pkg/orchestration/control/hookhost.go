@@ -159,9 +159,11 @@ func (c *Controller) stopFailedRun(ctx context.Context, id, hookErr, comment str
 	if err != nil {
 		return false
 	}
-	if _, err := c.store.Update(ctx, "controller", t.ID, store.Update{Fields: b, Comment: comment, IfRevision: t.Revision}); err != nil {
+	nt, err := c.store.Update(ctx, "controller", t.ID, store.Update{Fields: b, Comment: comment, IfRevision: t.Revision})
+	if err != nil {
 		return false
 	}
+	c.recordRunFinding(ctx, nt, f)
 	// A run wait reads the state: wake the waits on this run (#679).
 	c.wakeWaitsSubjects(workflow.RunSubject(t.ID))
 	return true

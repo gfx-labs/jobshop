@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -202,15 +203,80 @@ func TestLearnAnswer(t *testing.T) {
 	assert.Equal(t, "answer from @op: use main", ls[0].Fix)
 }
 
+// triageRun fires the scan for one finding and returns its triage run and
+// the diagnose step, claimed by a plan session.
+func triageRun(t *testing.T, c *Controller, dir string) (domain.Ticket, domain.Ticket, scope) {
+	t.Helper()
+	ctx := t.Context()
+	if c.metrics == nil {
+		m, err := telemetry.NewMetrics()
+		require.NoError(t, err)
+		c.metrics = m
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "issues"), []byte("issue-7 no run\n"), 0o600))
+	c.runTriggers(ctx, c.config())
+	runs, err := c.store.List(ctx, store.Filter{Kind: domain.KindRun})
+	require.NoError(t, err)
+	require.Len(t, runs, 1)
+	steps, err := store.Children(ctx, c.store, runs[0].ID)
+	require.NoError(t, err)
+	sess := mkTicket(t, c, store.NewTicket{Kind: domain.KindSession, Pool: "plan", Fields: json.RawMessage(`{"agent":"fake"}`)})
+	_, _, err = c.store.Claim(ctx, steps[0].ID, sess.ID, time.Hour)
+	require.NoError(t, err)
+	return runs[0], steps[0], scope{actor: sess.ID, session: sess.ID, project: "js", pool: "plan"}
+}
+
+// TestLearnFinding: a finding's triage run that closes done leaves no
+// learning; one that ends needs_human leaves one with the finding and the
+// cause (JOB-224).
 func TestLearnFinding(t *testing.T) {
 	t.Parallel()
-	c, _, dir := scanController(t)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "issues"), []byte("issue-7 no run\n"), 0o600))
-	c.runTriggers(t.Context(), c.config())
-	ls := learnings(t, c, store.LearningFilter{Kind: domain.LearningFailure})
-	require.Len(t, ls, 1)
-	assert.Contains(t, ls[0].Summary, "finding issue_no_run on issue-7: no run")
-	assert.Equal(t, domain.LearningSourceController, ls[0].Source)
+	failures := func(c *Controller) []domain.Learning {
+		return learnings(t, c, store.LearningFilter{Kind: domain.LearningFailure})
+	}
+
+	t.Run("done", func(t *testing.T) {
+		t.Parallel()
+		c, _, dir := scanController(t)
+		run, step, sc := triageRun(t, c, dir)
+		assert.Empty(t, failures(c), "firing the scan records nothing")
+		_, err := c.closeTicket(t.Context(), sc, rpc.CloseParams{})
+		require.NoError(t, err)
+		c.completeRun(t.Context(), run.ID)
+		assert.Equal(t, domain.RunDone, runStateOf(t, c, run.ID))
+		assert.Empty(t, learnings(t, c, store.LearningFilter{}), "step %s closed done", step.ID)
+	})
+
+	t.Run("failed", func(t *testing.T) {
+		t.Parallel()
+		c, _, dir := scanController(t)
+		run, _, sc := triageRun(t, c, dir)
+		_, err := c.report(t.Context(), sc, rpc.ReportParams{State: rpc.ReportFailed, Note: "cannot reach the tracker"})
+		require.NoError(t, err)
+		_, err = c.closeTicket(t.Context(), sc, rpc.CloseParams{Resolution: "failed"}) // retries: 1
+		require.NoError(t, err)
+		assert.Equal(t, domain.RunNeedsHuman, runStateOf(t, c, run.ID))
+		var got []domain.Learning
+		for _, l := range failures(c) {
+			if strings.Contains(l.Summary, "finding issue_no_run") {
+				got = append(got, l)
+			}
+		}
+		require.Len(t, got, 1)
+		assert.Contains(t, got[0].Summary, "finding issue_no_run on issue-7: no run")
+		assert.Contains(t, got[0].Summary, "triage run "+run.ID+" needs a human")
+		assert.Contains(t, got[0].Summary, "step diagnose failed: cannot reach the tracker")
+		assert.Equal(t, domain.LearningSourceController, got[0].Source)
+	})
+}
+
+func runStateOf(t *testing.T, c *Controller, id string) string {
+	t.Helper()
+	r, err := c.store.Get(t.Context(), id)
+	require.NoError(t, err)
+	f, err := domain.DecodeFields[domain.RunFields](r)
+	require.NoError(t, err)
+	return f.State
 }
 
 // TestLearnUpdate: open -> pr pending -> applied or rejected (#273).

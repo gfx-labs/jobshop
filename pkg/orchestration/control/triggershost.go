@@ -117,10 +117,6 @@ func (h triggerHost) FireFinding(ctx context.Context, cfg *config.Config, name s
 	return h.c.fireFinding(ctx, cfg, name, tr, s)
 }
 
-func (h triggerHost) RecordFinding(ctx context.Context, s triggers.Finding, run string) {
-	h.c.recordFinding(ctx, s, run)
-}
-
 func (h triggerHost) QuarantinedPools(cfg *config.Config) []triggers.Finding {
 	return h.c.signalPoolQuarantined(cfg)
 }
@@ -276,7 +272,9 @@ func (c *Controller) fireFinding(ctx context.Context, cfg *config.Config, name s
 		}
 		p.Vars[k] = out
 	}
-	m := map[string]string{"name": name, "key": name + "/" + key}
+	// The finding rides on the run so the learning can be written when
+	// the run ends badly (JOB-224); a run that finishes done teaches nothing.
+	m := map[string]string{"name": name, "key": name + "/" + key, learnSignalKey: s.Signal, learnSubjectKey: s.Subject, learnDetailKey: clip(s.Detail, 200)}
 	if tr.Run.Key == "" {
 		// The #704 hold covers runs keyed on the finding. A run with its
 		// own key (pr-<n>, JOB-33) never took part: leave it out.
