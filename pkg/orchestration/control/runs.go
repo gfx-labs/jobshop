@@ -557,6 +557,9 @@ func (c *Controller) setRunState(ctx context.Context, actor string, t domain.Tic
 	if err != nil {
 		return t, err
 	}
+	if state == domain.RunNeedsHuman {
+		c.recordRunFinding(ctx, t, f)
+	}
 	if resolution == "" {
 		if state == domain.RunRunning {
 			// A resumed run no longer needs its earlier escalations (JOB-195).

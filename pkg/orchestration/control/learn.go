@@ -8,7 +8,6 @@ import (
 
 	"github.com/gfx-labs/jobshop/pkg/domain"
 	"github.com/gfx-labs/jobshop/pkg/knowledge"
-	"github.com/gfx-labs/jobshop/pkg/orchestration/triggers"
 	"github.com/gfx-labs/jobshop/pkg/storage/store"
 	"github.com/gfx-labs/jobshop/pkg/transport/rpc"
 )
@@ -315,11 +314,57 @@ func (c *Controller) recordAnswer(ctx context.Context, qt domain.Ticket, about, 
 	c.record(ctx, domain.LearningCorrection, t, fmt.Sprintf("question %s on %s: %s", qt.ID, about, q), "answer from "+from+": "+text)
 }
 
-// recordFinding records a finding the scan trigger fired on.
-func (c *Controller) recordFinding(ctx context.Context, s triggers.Finding, run string) {
-	t := domain.Ticket{ID: run}
-	if st, err := c.store.Get(ctx, s.Subject); err == nil {
+// meta.trigger keys a scan-fired run carries so its learning can be written
+// when the run ends (JOB-224).
+const (
+	learnSignalKey  = "signal"
+	learnSubjectKey = "subject"
+	learnDetailKey  = "detail"
+)
+
+// recordRunFinding records the learning of a run a scan trigger fired for a
+// finding, when the run needs a human. A triage run that closes done is
+// routine and leaves no learning (JOB-224). The cause is the hook error or
+// the exhausted step's failure note or last comment.
+func (c *Controller) recordRunFinding(ctx context.Context, run domain.Ticket, f domain.RunFields) {
+	signal := metaString(run.Meta, triggerPack, learnSignalKey)
+	if signal == "" {
+		return
+	}
+	subject := metaString(run.Meta, triggerPack, learnSubjectKey)
+	s := fmt.Sprintf("finding %s on %s: %s (triage run %s needs a human", signal, subject, metaString(run.Meta, triggerPack, learnDetailKey), run.ID)
+	if cause := c.runCause(ctx, run.ID, f); cause != "" {
+		s += ": " + cause
+	}
+	t := run
+	if st, err := c.store.Get(ctx, subject); err == nil {
 		t = st
 	}
-	c.record(ctx, domain.LearningFailure, t, fmt.Sprintf("finding %s on %s: %s (triage run %s)", s.Signal, s.Subject, s.Detail, run), "")
+	c.record(ctx, domain.LearningFailure, t, s+")", "")
+}
+
+// runCause says why a run needs a human: its hook error, else the failure
+// note or last comment of its exhausted step.
+func (c *Controller) runCause(ctx context.Context, run string, f domain.RunFields) string {
+	if f.HookError != "" {
+		return "hook error: " + f.HookError
+	}
+	steps, err := store.Children(ctx, c.store, run)
+	if err != nil {
+		return ""
+	}
+	for _, st := range steps {
+		if !domain.StepExhausted(st) {
+			continue
+		}
+		cause := failedReason(st)
+		if cause == "" {
+			if cs, err := store.Comments(ctx, c.store, st.ID); err == nil && len(cs) > 0 {
+				cause = cs[len(cs)-1].Body
+			}
+		}
+		sf, _ := domain.DecodeFields[domain.StepFields](st)
+		return "step " + sf.Step + " failed: " + cause
+	}
+	return ""
 }

@@ -5,7 +5,7 @@
 //
 // The controller keeps everything that writes: starting runs, filing
 // tickets, running trigger commands and recording learnings stay behind
-// Host (Fire, FireFinding, RecordFinding), so the controller is still the
+// Host (Fire, FireFinding), so the controller is still the
 // only owner of the run and ticket graph. Evaluation reads the store and
 // keeps a little runtime state of its own: the last poll of each trigger,
 // the background check jobs and the script signal cache. Durable state
@@ -52,7 +52,7 @@ type CommandRun struct {
 }
 
 // Host is what the engine needs from the controller. Methods that write
-// (Fire, FireFinding, RecordFinding) and the signals other subsystems own
+// (Fire, FireFinding) and the signals other subsystems own
 // (pool pauses, ingest, Linear, resources, scripts) stay in the controller.
 type Host interface {
 	// Config is the active config. Pass code takes the pass's config
@@ -99,8 +99,6 @@ type Host interface {
 	// FireFinding starts the workflow of a scan trigger for one finding.
 	// existing is true when an open run already had its key.
 	FireFinding(ctx context.Context, cfg *config.Config, name string, tr config.Trigger, s Finding) (run domain.Ticket, existing bool, err error)
-	// RecordFinding records the learning of a fired finding.
-	RecordFinding(ctx context.Context, s Finding, run string)
 
 	Signals
 }
