@@ -45,7 +45,8 @@ silent journal (1h), a `needs_human` run or ticket (`scan_human_after`,
 4h), a ticket labeled `blocked` (1h), and through scan scripts in
 `triggers.star`: an open issue with no run (`issue_no_run`), a green PR
 nobody merged for 2h (`pr_unmerged`), no commit on `ci_branch` for 6h
-while PRs are open (`no_merge`). One step, `diagnose` (triage, 1 retry,
+while PRs are open (`no_merge`; release PRs, drafts and PRs with a
+`pr_review_skip_labels` label do not count as open). One step, `diagnose` (triage, 1 retry,
 `prompts/triage.md`): it fixes what it can in place (start the missing
 run, reroute or requeue, resume, rebase, cancel a stale drill, restart a
 session, file a bug) and closes `done`, or closes `failed` with the
@@ -189,8 +190,8 @@ Live checks: `docs/verify/linear-pack.md`, `docs/verify/linear-intake.md`.
 | `escalation_chat_pool` | Empty (default): an escalation is only a ticket. A `type: chat` pool (e.g. the operator pack's `operator`): the controller opens a chat session there, key `escalation:<ticket id>`, whose first message (model context) is picked by cause, see Escalation chat prompts below, and records it in `meta.escalation`. Desk's chat pool should be the same (#379) |
 | `authors` | Comma-separated GitHub logins whose issues start work besides `human` and App-filed issues. Others wait until someone adds the `accepted` label (#340) |
 | `pr_review_skip_authors` | Comma-separated logins whose green PRs `pr_unmerged` does not flag, besides `human` (#509) |
-| `pr_review_skip_labels` | Comma-separated PR labels `pr_unmerged` does not flag. Default `hold` (#509) |
-| `release_pr_label` | Label of release-please PRs. Default `autorelease: pending`. A green, non-draft open PR with it gets one `release-merge` run (refinery merges it without review), and `pr_unmerged` does not flag it. Empty turns the `release-pr` trigger off (#698) |
+| `pr_review_skip_labels` | Comma-separated PR labels `pr_unmerged` does not flag and `no_merge` does not count as open work. Default `hold` (#509) |
+| `release_pr_label` | Label of release-please PRs. Default `autorelease: pending`. A green, non-draft open PR with it gets one `release-merge` run (refinery merges it without review), and `pr_unmerged` and `no_merge` skip it. Empty turns the `release-pr` trigger off (#698) |
 | `check_cmd` | Build and test command run before pushing, e.g. `make test` |
 | `docs_rule` | Where implement puts design notes and runbook checks. Default: a new file per note, never a numbered section appended to a shared doc (parallel PRs collide on the number) |
 | `ci_workflow` | GitHub Actions workflow name `master-red` watches, and the workflow the implement and post-merge `github.checks` waits follow (`workflow=`). Default `ci` |
