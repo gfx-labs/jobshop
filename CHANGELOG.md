@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.36](https://github.com/gfx-labs/jobshop/compare/v0.10.35...v0.10.36) (2026-11-17)
+
+
+### Bug fixes
+
+* **control:** record scan finding learnings at run end (JOB-224) ([#1278](https://github.com/gfx-labs/jobshop/issues/1278)) ([ad95318](https://github.com/gfx-labs/jobshop/commit/ad953185d0be64b50bf8d0507931f082b3c3a36f))
+* **packs/github:** no_merge ignores release, draft and held PRs (JOB-223) ([#1277](https://github.com/gfx-labs/jobshop/issues/1277)) ([3c5ea28](https://github.com/gfx-labs/jobshop/commit/3c5ea28bb5def8b1e4aa6b5be6a1ad0d34bbe379))
+
 ## [0.10.35](https://github.com/gfx-labs/jobshop/compare/v0.10.34...v0.10.35) (2026-11-17)
 
 
