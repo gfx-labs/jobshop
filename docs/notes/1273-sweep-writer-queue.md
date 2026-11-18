@@ -39,3 +39,15 @@ The production trace was not available to this change, so which writer held
 the 25s is not known. The next `slow tick` with `writer_queue` in its hints
 names it in `writer_holders`; if `sweep/Expire` still queues, it is a long
 holder elsewhere (look at `slowest_call_blocked_by`).
+
+## Seen since (2026-11-18, JOB-231)
+
+Still not shown. Two `slow tick` records on selfdev carry `writer_holders`
+(`journalctl --no-pager -t jobshop | grep 'slow tick' | grep writer_holders`),
+both 2026-11-17 05:41 UTC and both small: `run_triggers/(*collection).Put`
+held the writer 0.31s (tick 3.2s), and `supervise/Apply` held it 1.30s (tick
+1.7s, blocked by `(*collection).Claim`). The 25s queue (a 26.5s tick at 02:22
+that day, `sweep` 24.9s, 73.9s of summed writer waits) came from a controller
+that predates the writer log, so it has no holder. No tick over 1s on 0.10.36
+(from 2026-11-17 23:59 UTC to 04:46 on the 18th). Which writer held a 25s
+queue is still unknown; the first such record names it.

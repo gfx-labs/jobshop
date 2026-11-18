@@ -50,6 +50,58 @@ connection, median of 7):
 Quiet-tick numbers from selfdev after deploy are read as in
 `docs/verify/tick-latency.md` and reported on JOB-191.
 
+## Measured on selfdev, 2026-11-18 (JOB-231)
+
+Window: the selfdev controller on 0.10.36, pid 124786, started
+2026-11-17 23:59:02 UTC, read at 2026-11-18 04:46 UTC (4h47m, 637 ticks).
+Agents were running, so these are ordinary ticks, not an idle host.
+
+How to get them (the journal holds several controllers; selfdev is the pid
+whose `run started` lines say `run=js-`, and `/proc/<pid>/exe` names the
+version):
+
+```
+journalctl --no-pager -t jobshop --since 2026-11-14 | grep 'slow tick'
+curl -s localhost:9464/metrics | grep jobshop_tick_step_duration_seconds_
+```
+
+`/api/system` and `jobshop system status` were not readable from the agent
+session (`forbidden: needs the admin socket or pool admin grant
+"pool-list"`), so `tick_seconds`, `p95_seconds` and a p50 are not measured.
+The metrics endpoint gives only `_sum` and `_count` per step: its histogram
+buckets are the OpenTelemetry defaults (0, 5, 10, 25, ... 10000) on a metric
+in seconds, so every sample is in the `le="5"` bucket and no percentile can be
+read from them. The figures below are means, not p50.
+
+| Step | Before JOB-191 (p50, 2026-11-10) | After, 0.10.36 (mean, 637 ticks) |
+|---|---|---|
+| `run_triggers` | 614ms | 195ms |
+| `supervise` | 127ms | 25ms |
+| `sweep_runs` | not recorded | 12ms |
+| `sweep_attention_chats` | not recorded | 10ms |
+| all tick steps summed | 0.7s to 1.9s (a quiet tick) | 249ms |
+
+`evaluate` has no step metric of its own (it is a trigger inside
+`run_triggers`), so its time is not shown separately. A p50 against a mean is
+not a like-for-like comparison. No tick took 1s, so a long tail does not
+explain the mean, but the p50 itself is unmeasured.
+
+No `slow tick` (1s or more) in those 4h47m. Earlier selfdev controllers since
+the probe landed (journal, `grep 'slow tick'`, selfdev pids only): 7 in 29h
+(2026-11-14 to 15), 2 in 15h, 18 in 25h (14 of them 07:08 to 07:28 on
+2026-11-16, `run_triggers`), 5 in 20h (2026-11-17), then 0 on 0.10.36. I do
+not know which of those controllers carried which change, so the drop is not
+attributed to any one of them.
+
+What this does not show:
+
+- The quiet tick is not under the 0.1s the verify doc expects: `run_triggers`
+  alone averages 195ms. JOB-191 is not met on that line.
+- The 7.3s pattern (every store call about 90ms or a multiple) has not
+  recurred while the probe was running, so it is neither traced nor shown
+  fixed. Four hours without a slow tick is not evidence about a pattern that
+  appeared once in days.
+
 ## Not done
 
 The 7.3s tick at 10:00:33 UTC (every store call at about 90ms or a multiple)
