@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.37](https://github.com/gfx-labs/jobshop/compare/v0.10.36...v0.10.37) (2026-11-18)
+
+
+### Bug fixes
+
+* **learn:** reject placeholder learning summaries (JOB-230) ([#1280](https://github.com/gfx-labs/jobshop/issues/1280)) ([05ca0c0](https://github.com/gfx-labs/jobshop/commit/05ca0c098d87fff76f587250fa2e2a018dd5f694))
+
 ## [0.10.36](https://github.com/gfx-labs/jobshop/compare/v0.10.35...v0.10.36) (2026-11-17)
 
 
