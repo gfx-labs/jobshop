@@ -128,6 +128,9 @@ func ValidLearning(l *Learning) error {
 	if l.Source != LearningSourceAgent && l.Source != LearningSourceController {
 		return fmt.Errorf("%w: learning source %q", ErrInvalid, l.Source)
 	}
+	if l.Source == LearningSourceAgent && PlaceholderSummary(l.Summary) {
+		return fmt.Errorf("%w: learning summary %q is a placeholder: skip the call when there is nothing to record", ErrInvalid, l.Summary)
+	}
 	if l.Status == "" {
 		l.Status = LearningOpen
 	}
@@ -143,6 +146,15 @@ func ValidLearning(l *Learning) error {
 	}
 	l.Scope = sc
 	return nil
+}
+
+// placeholderSummaries are summaries an agent writes to say it has nothing
+// to record; stored, the curator would read them as learnings (JOB-230).
+var placeholderSummaries = map[string]bool{"none": true, "n/a": true, "na": true, "-": true, "nothing": true, "no": true}
+
+// PlaceholderSummary reports whether s, trimmed and lowercased, is one of them.
+func PlaceholderSummary(s string) bool {
+	return placeholderSummaries[strings.ToLower(strings.TrimSpace(s))]
 }
 
 // kindName is what a learning kind looks like (#524).

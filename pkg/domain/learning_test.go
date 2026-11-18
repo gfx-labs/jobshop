@@ -41,6 +41,23 @@ func TestValidLearning(t *testing.T) {
 	}
 }
 
+// TestLearningPlaceholderSummary: an agent's "none" is not a learning
+// (JOB-230); controller-written ones are not checked.
+func TestLearningPlaceholderSummary(t *testing.T) {
+	for _, s := range []string{"none", "None", " N/A ", "na", "-", "nothing", "NO", "\tnone\n"} {
+		l := domain.Learning{Kind: domain.LearningFailure, Summary: s, Source: domain.LearningSourceAgent}
+		err := domain.ValidLearning(&l)
+		require.ErrorIs(t, err, domain.ErrInvalid, s)
+		assert.ErrorContains(t, err, "skip the call when there is nothing to record", s)
+	}
+	for _, s := range []string{"none of the tests ran", "no space left on device", "n/a in config", "--force", "nothing to commit failed"} {
+		l := domain.Learning{Kind: domain.LearningFailure, Summary: s, Source: domain.LearningSourceAgent}
+		require.NoError(t, domain.ValidLearning(&l), s)
+	}
+	l := domain.Learning{Kind: domain.LearningFailure, Summary: "none", Source: domain.LearningSourceController}
+	require.NoError(t, domain.ValidLearning(&l))
+}
+
 func TestLearningKinds(t *testing.T) {
 	// Default config: today's three kinds.
 	for _, k := range []string{"correction", "failure", "workaround"} {
