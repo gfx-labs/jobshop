@@ -191,3 +191,32 @@ func checkPoolsFrom(instances []Instance, index map[string]int) error {
 	}
 	return nil
 }
+
+// refOwners resolves each packs list entry's pools_from to the index of
+// the entry it names (JOB-232). Only sharing entries appear in the result.
+func refOwners(refs []Ref) (map[int]int, error) {
+	var owners map[int]int
+	for i, r := range refs {
+		if r.PoolsFrom == "" {
+			continue
+		}
+		found := -1
+		for j, o := range refs {
+			if j == i || refName(o) != r.PoolsFrom {
+				continue
+			}
+			if found >= 0 {
+				return nil, fmt.Errorf("packs[%d]: pools_from %q names more than one packs entry: give them distinct prefixes", i, r.PoolsFrom)
+			}
+			found = j
+		}
+		if found < 0 {
+			return nil, fmt.Errorf("packs[%d]: pools_from %q must name another packs entry by its prefix (without the trailing -) or, with no prefix, its pack directory", i, r.PoolsFrom)
+		}
+		if owners == nil {
+			owners = map[int]int{}
+		}
+		owners[i] = found
+	}
+	return owners, nil
+}

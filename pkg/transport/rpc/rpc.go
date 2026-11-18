@@ -476,6 +476,10 @@ type SessionNewParams struct {
 	Title   string `json:"title,omitempty"`
 	// DisplayName labels the session in lists (#626); not unique.
 	DisplayName string `json:"display_name,omitempty"`
+	// Repo is the owner/name key of a pool keyed by repo (JOB-207): the
+	// session claims only that repo's tickets and works in its checkout.
+	// Empty starts a default session. Needs Pool, whose repos has the key.
+	Repo string `json:"repo,omitempty"`
 }
 
 // VersionResult is the controller binary's version and commit. Sessions

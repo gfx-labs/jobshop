@@ -1536,6 +1536,7 @@ export interface SessionNewParams {
   key?: string;
   title?: string;
   display_name?: string;
+  repo?: string;
 }
 
 export interface SessionNewResult {

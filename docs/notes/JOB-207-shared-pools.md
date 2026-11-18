@@ -43,9 +43,18 @@ with `pools_from` set:
         vars: {repo: "acme/gizmo", checkout: "/src/gizmo", agent: "a", human: "wile"}
     }
 
-Not built: keyed sessions for YAML `packs:` lists, and a `session new
---repo`. A ticket filed by hand needs `--meta '{"github":{"repo":...}}'`
-to reach a keyed session.
+**YAML packs lists (JOB-232, 2026-11-18).** A `packs:` list entry in
+jobshop.yaml takes `pools_from` too. It names the other entry by its
+prefix without the trailing `-`/`_`, or by its pack directory when it has
+no prefix; the owner may come later in the list. Rules are the CUE
+ones (no chain, only the owner's pools). A pool's `repos:` keys render
+`{{.var}}` in YAML packs, so the entry can add its repo from a var.
+
+**`session new --repo <owner/name>`** (JOB-232) starts a session keyed
+to a `repos:` entry of `--pool`, matched case-insensitively. A key the pool
+lacks is refused. Without it the session is a default one. A ticket
+filed by hand still needs `--meta '{"github":{"repo":...}}'` for the
+keyed session to claim it.
 
 Tests: `TestGithubPackSharedPools`, `TestPoolKeyedByRepo`, `TestForKeys`,
-storetest `ClaimNextRepo`.
+storetest `ClaimNextRepo`, `TestPackPoolsFromYAML`, `TestSessionNewRepo`.

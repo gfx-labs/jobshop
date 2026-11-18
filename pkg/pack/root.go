@@ -30,7 +30,7 @@ func (ld loader) loadRoot(path, dir string, rewrite func(string) string) ([]laye
 		}
 		return layers, nil, nil
 	}
-	layers, err := ld.loadPackFile(path, nil, "", 0, true)
+	layers, err := ld.loadPackFile(path, nil, "", "", 0, true)
 	if err != nil {
 		return nil, nil, packErr(err)
 	}

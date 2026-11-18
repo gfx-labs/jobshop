@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -210,4 +211,85 @@ func keys[V any](m map[string]V) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// sharePack adds a repo to another entry's dev pool and has its own
+// workflow, the way a CUE entry with pools_from does (JOB-232).
+var sharePack = map[string]string{
+	"share/pack.yaml": `pools:
+  dev: {repos: {"{{.repo}}": {checkout: "{{.checkout}}"}}}
+workflows:
+  pr-work:
+    vars: [issue]
+    repo: "{{.repo}}"
+    steps:
+      - {id: implement, pool: dev, title: "Implement {{.issue}}", prompt: "pool {{.pool_prefix}}dev"}
+`,
+}
+
+func loadShared(t *testing.T, host string) (*Config, error) {
+	t.Helper()
+	dir := t.TempDir()
+	files := map[string]string{"jobshop.yaml": hostBase + host}
+	for _, m := range []map[string]string{fixturePack, sharePack} {
+		for k, v := range m {
+			files[k] = v
+		}
+	}
+	writeFiles(t, dir, files)
+	return LoadFile(filepath.Join(dir, "jobshop.yaml"))
+}
+
+// TestPackPoolsFromYAML (JOB-232): a YAML packs entry with pools_from
+// shares the pools of the entry it names, by prefix or, unprefixed, by
+// pack directory. Its pool entries merge into the owner's pool and its
+// workflow's steps land there.
+func TestPackPoolsFromYAML(t *testing.T) {
+	const share = "  - path: share\n    prefix: gz-\n    pools_from: %s\n    vars: {repo: acme/gizmo, checkout: /src/gizmo}\n"
+	for name, tc := range map[string]struct{ owner, from, pools string }{
+		"unprefixed owner": {"", "gh", ""},
+		"prefixed owner":   {"    prefix: wd-\n", "wd", "wd-"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			c, err := loadShared(t, "packs:\n  - path: gh\n"+tc.owner+"    vars: "+ghVars+"\n"+strings.Replace(share, "%s", tc.from, 1))
+			require.NoError(t, err)
+			dev := tc.pools + "dev"
+			assert.ElementsMatch(t, []string{dev, tc.pools + "plan"}, keys(c.Pools), "the sharing entry declares no pools")
+			assert.Equal(t, "/src/widget", c.Pools[dev].Repo, "the owner's checkout stays the default")
+			assert.Equal(t, "/src/gizmo", c.Pools[dev].Repos["acme/gizmo"].Checkout)
+			w := c.Workflows["gz-pr-work"]
+			assert.Equal(t, dev, w.Steps[0].Pool)
+			prompt, err := w.Render(w.Steps[0].Prompt, w.PackVars)
+			require.NoError(t, err)
+			assert.Equal(t, "pool "+dev, prompt, "pool_prefix is the owner's")
+			assert.Equal(t, "gz-", w.PackVars[pack.PrefixVar])
+			assert.Equal(t, tc.pools, w.PackVars[pack.PoolPrefixVar])
+
+			require.Len(t, c.Instances, 2)
+			in := c.Instances[1]
+			assert.Equal(t, tc.from, in.PoolsFrom)
+			assert.Equal(t, tc.pools, in.PoolPrefix)
+			assert.ElementsMatch(t, []string{dev, tc.pools + "plan"}, in.Pools)
+		})
+	}
+
+	// The owner may come after the sharing entry in the list.
+	c, err := loadShared(t, "packs:\n"+strings.Replace(share, "%s", "gh", 1)+"  - path: gh\n    vars: "+ghVars+"\n")
+	require.NoError(t, err)
+	assert.Equal(t, "/src/gizmo", c.Pools["dev"].Repos["acme/gizmo"].Checkout)
+}
+
+func TestPackPoolsFromYAMLErrors(t *testing.T) {
+	gh := "  - path: gh\n    vars: " + ghVars + "\n"
+	for name, tc := range map[string]struct{ host, want string }{
+		"unknown":   {"packs:\n" + gh + "  - path: share\n    prefix: gz-\n    pools_from: nope\n    vars: {repo: a/b, checkout: /c}\n", `pools_from "nope" must name another packs entry`},
+		"itself":    {"packs:\n  - path: share\n    prefix: gz-\n    pools_from: gz\n    vars: {repo: a/b, checkout: /c}\n", "must name another packs entry"},
+		"chain":     {"packs:\n" + gh + "  - path: share\n    prefix: a-\n    pools_from: gh\n    vars: {repo: a/b, checkout: /c}\n  - path: share\n    prefix: b-\n    pools_from: a\n    vars: {repo: a/c, checkout: /c}\n", "that entry takes its pools from gh"},
+		"ambiguous": {"packs:\n" + gh + gh + "  - path: share\n    prefix: gz-\n    pools_from: gh\n    vars: {repo: a/b, checkout: /c}\n", "names more than one packs entry"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := loadShared(t, tc.host)
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
 }

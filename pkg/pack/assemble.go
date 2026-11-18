@@ -166,27 +166,69 @@ func Assemble(in Input, opts Options) (*Result, error) {
 		if ref.Path == "" {
 			return nil, fmt.Errorf("%s: packs[%d]: path is required", name, i)
 		}
-		p := ref.Path
-		if in.Rewrite != nil {
-			p = in.Rewrite(p)
-		}
-		if !filepath.IsAbs(p) {
-			p = filepath.Join(dir, p)
-		}
 		if ref.Prefix != "" && !prefixPattern.MatchString(ref.Prefix) {
 			return nil, fmt.Errorf("%s: packs[%d]: prefix %q must match %s", name, i, ref.Prefix, prefixPattern)
 		}
-		layers, err := ld.loadPack(p, ref.Vars, ref.Prefix, 0)
-		if err != nil {
-			return nil, packErr(err)
-		}
-		if ref.Prefix != "" {
-			prefixLayers(layers, ref.Prefix, nil)
-			for i := range layers {
-				layers[i].textSources = prefixSources(layers[i].textSources, ref.Prefix)
+	}
+	owners, err := refOwners(head.Packs)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", name, err)
+	}
+	// An entry with pools_from is renamed after the entry it names (its
+	// pool names map to that entry's), so load the others first and merge
+	// everything in list order.
+	loaded := make([][]layer, len(head.Packs))
+	summaries := make([]Instance, len(head.Packs))
+	index := map[string]int{}
+	for _, owner := range owners {
+		index[refName(head.Packs[owner])] = owner
+	}
+	for _, sharing := range []bool{false, true} {
+		for i, ref := range head.Packs {
+			owner, shares := owners[i]
+			if shares != sharing {
+				continue
+			}
+			p := ref.Path
+			if in.Rewrite != nil {
+				p = in.Rewrite(p)
+			}
+			if !filepath.IsAbs(p) {
+				p = filepath.Join(dir, p)
+			}
+			poolPrefix := ref.Prefix
+			var pools map[string]string
+			if shares {
+				poolPrefix = head.Packs[owner].Prefix
+				pools = sharedPools(summaries[owner], poolPrefix)
+			}
+			layers, err := ld.loadPack(p, ref.Vars, ref.Prefix, poolPrefix, 0)
+			if err != nil {
+				return nil, packErr(err)
+			}
+			if ref.Prefix != "" || pools != nil {
+				prefixLayers(layers, ref.Prefix, pools)
+				for i := range layers {
+					layers[i].textSources = renameSources(layers[i].textSources, ref.Prefix, pools)
+				}
+			}
+			loaded[i] = layers
+			summaries[i] = summarize(ref.Path, ref.Prefix, layers)
+			if shares {
+				summaries[i].PoolsFrom, summaries[i].PoolPrefix = ref.PoolsFrom, poolPrefix
 			}
 		}
-		instances = append(instances, summarize(ref.Path, ref.Prefix, layers))
+	}
+	if err := checkPoolsFrom(summaries, index); err != nil {
+		return nil, fmt.Errorf("%s: %w", name, err)
+	}
+	for i, layers := range loaded {
+		// A sharing entry uses every pool of its owner, declared or not
+		// (as in a CUE entry): its hooks resolve pool names.
+		if owner, shares := owners[i]; shares {
+			summaries[i].Pools = slices.Clone(summaries[owner].Pools)
+		}
+		instances = append(instances, summaries[i])
 		for _, l := range layers {
 			watch.addDir(filepath.Dir(l.file))
 		}
@@ -245,11 +287,12 @@ func Assemble(in Input, opts Options) (*Result, error) {
 // loadPack reads dir/pack.yaml, substitutes vars, resolves prompt_file and
 // checks the schema. It returns the extended packs' layers first, then its
 // own. Errors name the pack file.
-func (ld loader) loadPack(dir string, given map[string]any, prefix string, depth int) ([]layer, error) {
-	return ld.loadPackFile(filepath.Join(dir, FileName), given, prefix, depth, false)
+// poolPrefix is the pool_prefix var: prefix, or the owner's with pools_from.
+func (ld loader) loadPack(dir string, given map[string]any, prefix, poolPrefix string, depth int) ([]layer, error) {
+	return ld.loadPackFile(filepath.Join(dir, FileName), given, prefix, poolPrefix, depth, false)
 }
 
-func (ld loader) loadPackFile(file string, given map[string]any, prefix string, depth int, root bool) ([]layer, error) {
+func (ld loader) loadPackFile(file string, given map[string]any, prefix, poolPrefix string, depth int, root bool) ([]layer, error) {
 	dir := FileDir(file)
 	if depth > maxDepth {
 		return nil, fmt.Errorf("%s: extends nested more than %d deep (a cycle?)", file, maxDepth)
@@ -288,7 +331,7 @@ func (ld loader) loadPackFile(file string, given map[string]any, prefix string, 
 	maps.Copy(vars, h.Defaults)
 	maps.Copy(vars, given)
 	vars[PrefixVar] = prefix
-	vars[PoolPrefixVar] = prefix
+	vars[PoolPrefixVar] = poolPrefix
 	if err := renderDefaults(vars, h.Defaults, given); err != nil {
 		return nil, fmt.Errorf("%s: %w", file, err)
 	}
@@ -305,6 +348,9 @@ func (ld loader) loadPackFile(file string, given map[string]any, prefix string, 
 		if ref.Prefix != "" {
 			return nil, fmt.Errorf("%s: extends[%d]: prefix is only allowed in packs entries", file, i)
 		}
+		if ref.PoolsFrom != "" {
+			return nil, fmt.Errorf("%s: extends[%d]: pools_from is only allowed in packs entries", file, i)
+		}
 		p := ref.Path
 		if !filepath.IsAbs(p) {
 			p = filepath.Join(dir, p)
@@ -315,7 +361,7 @@ func (ld loader) loadPackFile(file string, given map[string]any, prefix string, 
 			return nil, fmt.Errorf("%s: %w", file, err)
 		}
 		bvars, _ := bv.(map[string]any)
-		base, err := ld.loadPack(p, bvars, prefix, depth+1)
+		base, err := ld.loadPack(p, bvars, prefix, poolPrefix, depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -343,6 +389,9 @@ func (ld loader) loadPackFile(file string, given map[string]any, prefix string, 
 	m, _ = v.(map[string]any)
 	if m == nil {
 		m = map[string]any{}
+	}
+	if err := substituteRepoKeys(m, subVars); err != nil {
+		return nil, fmt.Errorf("%s: %w", file, err)
 	}
 	if err := setPackVars(m, vars, file); err != nil {
 		return nil, err

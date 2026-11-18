@@ -1063,11 +1063,13 @@ type sessionNewCmd struct {
 	Key     string `help:"External key, e.g. matrix:<room>; unique while open."`
 	Title   string `help:"Title."`
 	Name    string `help:"Display name, a non-unique label for lists. Default: the pool's display_name, else pool and ticket title."`
+	Repo    string `help:"Repo key (owner/name) of a pool keyed by repo: the session claims only that repo's tickets and works in its checkout. Needs --pool."`
 }
 
 func (c sessionNewCmd) Run(g *Globals) error {
 	return g.call(rpc.MethodSessionNew, rpc.SessionNewParams{
 		Project: c.Project, Pool: c.Pool, Agent: c.Agent, Key: c.Key, Title: c.Title, DisplayName: c.Name,
+		Repo: c.Repo,
 	}, nil)
 }
 
