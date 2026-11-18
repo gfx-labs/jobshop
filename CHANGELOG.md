@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.10.38](https://github.com/gfx-labs/jobshop/compare/v0.10.37...v0.10.38) (2026-11-18)
+
+
+### Features
+
+* **control:** pools_from for YAML packs lists and session new --repo (JOB-232) ([#1284](https://github.com/gfx-labs/jobshop/issues/1284)) ([30c3c43](https://github.com/gfx-labs/jobshop/commit/30c3c43a2605821743d0c66e19e365ae4e428677))
+* **triggers:** back off replan after idle passes (JOB-229) ([#1283](https://github.com/gfx-labs/jobshop/issues/1283)) ([25b21bf](https://github.com/gfx-labs/jobshop/commit/25b21bf1b9cb287f2a1a05355a904211fc0024b3))
+
+
+### Bug fixes
+
+* **telemetry:** use second-based buckets on duration histograms ([#1282](https://github.com/gfx-labs/jobshop/issues/1282)) ([#1286](https://github.com/gfx-labs/jobshop/issues/1286)) ([fcdf820](https://github.com/gfx-labs/jobshop/commit/fcdf820106fbe4bc31ab1ae3acf6dc4e0c3d0b7c))
+
 ## [0.10.37](https://github.com/gfx-labs/jobshop/compare/v0.10.36...v0.10.37) (2026-11-18)
 
 
