@@ -96,6 +96,9 @@ func (c *Config) checkScanTrigger(tr *Trigger) error {
 			return fmt.Errorf("cooldown %q must be a non-negative duration", tr.Cooldown)
 		}
 	}
+	if tr.CooldownMax != "" {
+		return errors.New("cooldown_max is not for scan triggers")
+	}
 	if tr.MaxRuns < 0 {
 		return errors.New("max_runs must be >= 0")
 	}

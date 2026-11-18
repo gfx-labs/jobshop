@@ -76,7 +76,8 @@ It replaces `blocker-check`: the planner labels a blocked claim
   Prompt: `prompts/github/plan.md`.
 - `replan` trigger (`triggers.star:replan`): when `dev` has no ready
   tickets, creates a planning ticket in `plan` (10m cooldown after the
-  last one closes).
+  last one closes, doubling to 2h after passes that changed nothing; see
+  `docs/notes/JOB-229-replan-backoff.md`).
 - `master-red` trigger (`triggers.star:master_red`): on a failed
   `ci_workflow` run on `ci_branch`, and on fallback polling, reads the
   latest completed run and starts a `ci-repair` run keyed by the failing

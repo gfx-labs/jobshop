@@ -144,6 +144,12 @@ type Trigger struct {
 	// Cooldown is the minimum time after its last ticket closed before the
 	// trigger fires again (Go duration).
 	Cooldown string `yaml:"cooldown"`
+	// CooldownMax lets the cooldown grow: each consecutive pass (a ticket
+	// the trigger filed) after which nothing else in the store was
+	// created or closed doubles it, up to this duration (Go duration, at
+	// least cooldown, which it needs). Something created or closed by
+	// anyone but the trigger resets it to cooldown. Not for scan triggers.
+	CooldownMax string `yaml:"cooldown_max,omitempty"`
 	// MaxRuns caps the runs a scan trigger starts per key (one finding);
 	// after that the finding is left to the escalation of the last run.
 	// Default 3. Scan triggers only.
@@ -2025,6 +2031,15 @@ func (c *Config) checkTrigger(name string, tr *Trigger) error {
 	if tr.Cooldown != "" {
 		if d, err := time.ParseDuration(tr.Cooldown); err != nil || d < 0 {
 			return fmt.Errorf("cooldown %q must be a non-negative duration", tr.Cooldown)
+		}
+	}
+	if tr.CooldownMax != "" {
+		d, err := time.ParseDuration(tr.CooldownMax)
+		if err != nil || d <= 0 {
+			return fmt.Errorf("cooldown_max %q must be a positive duration", tr.CooldownMax)
+		}
+		if base := Duration(tr.Cooldown, 0); base == 0 || d < base {
+			return errors.New("cooldown_max needs a cooldown and must be at least as long")
 		}
 	}
 	actions := 0
