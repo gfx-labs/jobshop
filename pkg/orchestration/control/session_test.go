@@ -800,6 +800,62 @@ func TestPoolKeyedByRepo(t *testing.T) {
 	assert.Contains(t, worktrees(repoA), filepath.Join(root.SessionDir(sa), "work"))
 }
 
+// TestSessionNewRepo (JOB-232): session new --repo starts a session keyed
+// to a repos entry of the pool, whatever the case it is spelled in. It
+// claims that repo's tickets and works in that checkout. A key the pool
+// lacks, or a pool with no repos, is refused.
+func TestSessionNewRepo(t *testing.T) {
+	root, start := poolRootReal(t, "1m")
+	repoA, repoB := filepath.Join(root.Dir, "a"), filepath.Join(root.Dir, "b")
+	for _, repo := range []string{repoA, repoB} {
+		for _, args := range [][]string{
+			{"init", "-q", "-b", "master", repo},
+			{"-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init"},
+		} {
+			out, err := exec.Command("git", args...).CombinedOutput()
+			require.NoError(t, err, string(out))
+		}
+	}
+	cfg := fmt.Sprintf("projects:\n  js: {}\nagents:\n  fake:\n    command: %q\n    args: [fake-agent]\npools:\n  dev:\n    project: js\n    agent: fake\n    max_sessions: 2\n    idle_timeout: 1m\n    repo: %q\n    ref: master\n    repos:\n      acme/b: {checkout: %q}\n  plain:\n    project: js\n    agent: fake\n    max_sessions: 1\n    idle_timeout: 1m\n    repo: %q\n    ref: master\n", os.Args[0], repoA, repoB, repoA)
+	require.NoError(t, os.WriteFile(filepath.Join(root.Dir, config.FileName), []byte(cfg), 0o600))
+	stop := start()
+	defer stop()
+
+	admin := dial(t, root.AdminSocket())
+	for name, p := range map[string]rpc.SessionNewParams{
+		"unknown key":      {Agent: "fake", Pool: "dev", Repo: "acme/c"},
+		"pool has no keys": {Agent: "fake", Pool: "plain", Repo: "acme/b"},
+		"no pool":          {Agent: "fake", Repo: "acme/b"},
+	} {
+		err := admin.Call(t.Context(), rpc.MethodSessionNew, p, nil)
+		require.ErrorContains(t, err, "no repos entry", name)
+	}
+
+	var sess rpc.SessionNewResult
+	require.NoError(t, admin.Call(t.Context(), rpc.MethodSessionNew, rpc.SessionNewParams{Agent: "fake", Pool: "dev", Repo: "ACME/B"}, &sess))
+	f, err := domain.DecodeFields[domain.SessionFields](sess.Ticket)
+	require.NoError(t, err)
+	assert.Equal(t, "acme/b", f.Repo, "the pool's spelling of the key")
+
+	var tb domain.Ticket
+	require.NoError(t, admin.Call(t.Context(), rpc.MethodTicketCreate, rpc.CreateParams{Title: "b", Pool: "dev", Meta: json.RawMessage(`{"github":{"repo":"acme/b","issue":2}}`)}, &tb))
+	var got rpc.ShowResult
+	passEventually(t, root.Dir, func() bool {
+		require.NoError(t, admin.Call(t.Context(), rpc.MethodTicketShow, rpc.IDParams{ID: tb.ID}, &got))
+		return got.Ticket.Status == domain.StatusClosed
+	}, "acme/b ticket closed")
+	var claimer string
+	for _, h := range got.History {
+		if h.Op == "claim" {
+			claimer = h.Actor
+		}
+	}
+	assert.Equal(t, sess.Ticket.ID, claimer, "the session started with --repo took the acme/b ticket")
+	out, err := exec.Command("git", "-C", repoB, "worktree", "list").CombinedOutput()
+	require.NoError(t, err, string(out))
+	assert.Contains(t, string(out), filepath.Join(root.SessionDir(sess.Ticket.ID), "work"))
+}
+
 // TestWorktreeDeleted removes a live session's git worktree, as happened on
 // gasserver (2026-11-01): the session respawns its host with a new worktree
 // and keeps working instead of failing every tool call.

@@ -279,3 +279,26 @@ func MergeValue(old, v any) any {
 	}
 	return out
 }
+
+// substituteRepoKeys renders {{.var}} in the keys of each pool's repos
+// map (JOB-232): substitute leaves map keys alone, but a pack entry that
+// adds its repo to a shared pool names the repo with a var.
+func substituteRepoKeys(m map[string]any, vars map[string]any) error {
+	pools, _ := m["pools"].(map[string]any)
+	for name, p := range pools {
+		pm, _ := p.(map[string]any)
+		repos, _ := pm["repos"].(map[string]any)
+		out := make(map[string]any, len(repos))
+		for k, e := range repos {
+			r, err := tmpl.Render(k, vars)
+			if err != nil {
+				return fmt.Errorf("pools.%s.repos.%s: %w", name, k, err)
+			}
+			out[r] = e
+		}
+		if repos != nil {
+			pm["repos"] = out
+		}
+	}
+	return nil
+}

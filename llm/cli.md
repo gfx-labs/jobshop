@@ -1867,6 +1867,9 @@ Flags:
       --title=STRING      Title.
       --name=STRING       Display name, a non-unique label for lists. Default:
                           the pool's display_name, else pool and ticket title.
+      --repo=STRING       Repo key (owner/name) of a pool keyed by repo:
+                          the session claims only that repo's tickets and works
+                          in its checkout. Needs --pool.
 ```
 
 ## jobshop session list

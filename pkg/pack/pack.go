@@ -69,6 +69,16 @@ type Ref struct {
 	// prefixLayers), so one pack can be included once per repo. Only
 	// in the root pack's packs list; bases inherit it.
 	Prefix string `yaml:"prefix,omitempty"`
+	// PoolsFrom makes the entry share another entry's pools (JOB-232),
+	// as pools_from does in a CUE packs entry. It names the other entry
+	// by its instance name: its prefix without a trailing "-" or "_", or
+	// its pack directory's name when it has no prefix (Instance.Labels).
+	PoolsFrom string `yaml:"pools_from,omitempty"`
+}
+
+// refName is the instance name pools_from uses for a packs list entry.
+func refName(r Ref) string {
+	return Instance{Path: r.Path, Prefix: r.Prefix}.name()
 }
 
 // head is the part of pack.yaml read before substitution.
@@ -165,12 +175,16 @@ func summarize(path, prefix string, layers []layer) Instance {
 // instance:<name> from the entry's prefix (or the pack's name without
 // one) and pack:<pack> (JOB-81).
 func (in Instance) Labels() []string {
-	pack := filepath.Base(in.Path)
-	inst := strings.Trim(in.Prefix, "-_")
-	if inst == "" {
-		inst = pack
+	return []string{"instance:" + in.name(), "pack:" + filepath.Base(in.Path)}
+}
+
+// name is the instance label's name: the prefix without a trailing "-" or
+// "_", or the pack directory's name.
+func (in Instance) name() string {
+	if inst := strings.Trim(in.Prefix, "-_"); inst != "" {
+		return inst
 	}
-	return []string{"instance:" + inst, "pack:" + pack}
+	return filepath.Base(in.Path)
 }
 
 // CheckInstancePool rejects pool for a step of workflow when another

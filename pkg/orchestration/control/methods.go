@@ -716,7 +716,16 @@ func (c *Controller) sessionNew(ctx context.Context, sc scope, p rpc.SessionNewP
 			return nil, err
 		}
 	}
-	t, err := c.newSession(ctx, cfg, sc.actor, proj, p.Pool, p.Agent, p.Key, p.Title, p.DisplayName, "")
+	repo := ""
+	if p.Repo != "" {
+		// The key must be one the pool has, in its spelling: a session
+		// keyed otherwise would claim nothing and use the default checkout.
+		repo = cfg.Pools[p.Pool].RepoKey(p.Repo)
+		if repo == "" {
+			return nil, fmt.Errorf("%w: pool %q has no repos entry %q", domain.ErrInvalid, p.Pool, p.Repo)
+		}
+	}
+	t, err := c.newSession(ctx, cfg, sc.actor, proj, p.Pool, p.Agent, p.Key, p.Title, p.DisplayName, repo)
 	if err != nil {
 		return nil, err
 	}
