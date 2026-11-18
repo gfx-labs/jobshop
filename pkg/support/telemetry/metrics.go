@@ -90,6 +90,13 @@ type Metrics struct {
 	Housekeeping metric.Float64Histogram
 }
 
+// secondBuckets are the boundaries of every duration histogram. The
+// OpenTelemetry default (0 to 10000) assumes milliseconds, so second-valued
+// samples all fell in le="5" and no percentile could be read (#1282). The
+// top end covers step commands that run minutes.
+var secondBuckets = metric.WithExplicitBucketBoundaries(
+	0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600)
+
 // NewMetrics builds the meter provider, Prometheus exporter and
 // instruments with the minimal jobshop resource (tests).
 func NewMetrics() (*Metrics, error) { return NewMetricsFor(nil) }
@@ -113,7 +120,7 @@ func NewMetricsFor(res *resource.Resource) (*Metrics, error) {
 	m.Claims, errs[3] = meter.Int64Counter("jobshop.claims", metric.WithDescription("Successful claims."))
 	m.Closes, errs[4] = meter.Int64Counter("jobshop.closes", metric.WithDescription("Ticket closes by resolution."))
 	m.LeaseExpiries, errs[5] = meter.Int64Counter("jobshop.lease.expiries", metric.WithDescription("Claims dropped by lease expiry."))
-	m.RequestTime, errs[6] = meter.Float64Histogram("jobshop.rpc.duration", metric.WithUnit("s"),
+	m.RequestTime, errs[6] = meter.Float64Histogram("jobshop.rpc.duration", metric.WithUnit("s"), secondBuckets,
 		metric.WithDescription("Socket request latency by method."))
 	m.JournalFrames, errs[7] = meter.Int64Counter("jobshop.journal.ship.frames",
 		metric.WithDescription("Journal frames shipped to VictoriaLogs, by pool (#530)."))
@@ -136,7 +143,7 @@ func NewMetricsFor(res *resource.Resource) (*Metrics, error) {
 		metric.WithDescription("Pool scale changes by pool and reason (up, cordon, uncordon, manual, auto)."))
 	m.InjectedBytes, errs[16] = meter.Int64Counter("jobshop.prompt.injected_bytes", metric.WithUnit("By"),
 		metric.WithDescription("Prompt rule bytes by pool and reason: new, changed, always, removed, or unchanged (skipped)."))
-	m.StepDuration, errs[17] = meter.Float64Histogram("jobshop.step.duration", metric.WithUnit("s"),
+	m.StepDuration, errs[17] = meter.Float64Histogram("jobshop.step.duration", metric.WithUnit("s"), secondBuckets,
 		metric.WithDescription("Command and http step attempts by step, type and result."))
 	m.StepResults, errs[18] = meter.Int64Counter("jobshop.step.results",
 		metric.WithDescription("Command and http step attempts by step, type and result (ok, not_yet, failed)."))
@@ -154,15 +161,15 @@ func NewMetricsFor(res *resource.Resource) (*Metrics, error) {
 		metric.WithDescription("Failed journal ship batches, by pool; the batch is retried."))
 	m.JournalLag, errs[25] = meter.Float64Gauge("jobshop.journal.ship.lag", metric.WithUnit("s"),
 		metric.WithDescription("Age of the oldest unshipped journal frame, by pool; 0 when caught up."))
-	m.TickStep, errs[26] = meter.Float64Histogram("jobshop.tick.step.duration", metric.WithUnit("s"),
+	m.TickStep, errs[26] = meter.Float64Histogram("jobshop.tick.step.duration", metric.WithUnit("s"), secondBuckets,
 		metric.WithDescription("Supervisor tick step duration by step (JOB-105)."))
-	m.Outbound, errs[27] = meter.Float64Histogram("jobshop.outbound.duration", metric.WithUnit("s"),
+	m.Outbound, errs[27] = meter.Float64Histogram("jobshop.outbound.duration", metric.WithUnit("s"), secondBuckets,
 		metric.WithDescription("Outbound HTTP call time to response headers by kind and target host (JOB-105)."))
-	m.LockWait, errs[28] = meter.Float64Histogram("jobshop.lock.wait", metric.WithUnit("s"),
+	m.LockWait, errs[28] = meter.Float64Histogram("jobshop.lock.wait", metric.WithUnit("s"), secondBuckets,
 		metric.WithDescription("Time waiting for the tick lock by lock and waiter (JOB-105)."))
 	m.PollerTimeouts, errs[29] = meter.Int64Counter("jobshop.poller.timeouts",
 		metric.WithDescription("Calls run off the supervisor pass that ran out their timeout, by poller (JOB-103)."))
-	m.Housekeeping, errs[30] = meter.Float64Histogram("jobshop.housekeeping.duration", metric.WithUnit("s"),
+	m.Housekeeping, errs[30] = meter.Float64Histogram("jobshop.housekeeping.duration", metric.WithUnit("s"), secondBuckets,
 		metric.WithDescription("Housekeeping step duration by step, run outside the supervisor tick (JOB-197)."))
 	for _, err := range errs {
 		if err != nil {
