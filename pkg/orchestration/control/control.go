@@ -242,9 +242,12 @@ type Controller struct {
 	statusMu sync.Mutex
 	// probe gathers the evidence for a slow tick (JOB-212); nil in tests
 	// that build a Controller by hand.
-	probe       *tickProbe
-	status      rpc.SystemStatus
-	tickSteps   map[string]float64
+	probe     *tickProbe
+	status    rpc.SystemStatus
+	tickSteps map[string]float64
+	// tickTrigger is the slowest trigger of this tick's run_triggers step
+	// (#1288), under statusMu.
+	tickTrigger triggers.Slowest
 	tickSamples []float64
 	// localMemory serializes local memory writes and restores (#592), so
 	// a write's before text is the file it replaced.
@@ -639,6 +642,7 @@ func (c *Controller) tick() {
 	before := c.beginTick()
 	c.statusMu.Lock()
 	c.tickSteps = map[string]float64{}
+	c.tickTrigger = triggers.Slowest{}
 	c.statusMu.Unlock()
 	defer c.finishTick(start)
 	// Deferred after finishTick so it runs first, with the step times.

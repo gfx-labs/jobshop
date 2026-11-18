@@ -54,7 +54,13 @@ func (c *Controller) triggerEngine() *triggers.Engine {
 
 // runTriggers fires every trigger whose conditions hold. Called each tick.
 func (c *Controller) runTriggers(ctx context.Context, cfg *config.Config) {
-	c.triggerEngine().Run(ctx, cfg)
+	s := c.triggerEngine().Run(ctx, cfg)
+	// The slow tick report names the slowest trigger (#1288).
+	c.statusMu.Lock()
+	defer c.statusMu.Unlock()
+	if s.Took > c.tickTrigger.Took {
+		c.tickTrigger = s
+	}
 }
 
 // triggerHost is the controller as triggers.Host.

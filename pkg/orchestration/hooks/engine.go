@@ -156,12 +156,18 @@ func hookKey(value string) string {
 
 // Put deduplicates an event and refreshes only superseded or explicitly retried work.
 func (c *Engine) Put(ctx context.Context, key string, in Invocation) error {
-	if in.AcceptedAt.IsZero() {
-		in.AcceptedAt = c.now()
-	}
 	col, err := c.store.Collection(ctx, hookInvocations)
 	if err != nil {
 		return err
+	}
+	// A scan or timer trigger offers the same invocation every tick while
+	// its condition holds. Look first on the reader pool: Put takes the
+	// writer even when the key exists and nothing changes (#1288).
+	if rec, err := col.Get(ctx, hookKey(key)); err == nil && rec.State != "superseded" && rec.State != "retry" {
+		return nil
+	}
+	if in.AcceptedAt.IsZero() {
+		in.AcceptedAt = c.now()
 	}
 	in.Public = c.hookInvocationPublic(in)
 	data, err := json.Marshal(in)

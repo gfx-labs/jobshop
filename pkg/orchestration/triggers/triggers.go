@@ -144,8 +144,16 @@ type State struct {
 	Key      string // check output, stored as meta.trigger.key
 }
 
-// Run fires every trigger whose conditions hold. Called each tick.
-func (e *Engine) Run(ctx context.Context, cfg *config.Config) {
+// Slowest is the trigger that took longest in one Run (#1288).
+type Slowest struct {
+	Name string
+	Took time.Duration
+}
+
+// Run fires every trigger whose conditions hold. Called each tick. It
+// returns the slowest trigger it evaluated, timed on the host clock, so a
+// slow tick can name it; zero when no trigger was due.
+func (e *Engine) Run(ctx context.Context, cfg *config.Config) (slowest Slowest) {
 	for _, name := range slices.Sorted(maps.Keys(cfg.Triggers)) {
 		tr := cfg.Triggers[name]
 		if e.host.Background() && e.jobs.running[name] {
@@ -154,6 +162,7 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) {
 		if !e.pollDue(name, tr) {
 			continue
 		}
+		start := e.host.Now()
 		e.RunChecked(ctx, cfg, name, false, func(ctx context.Context, cfg *config.Config) {
 			// Looked up again: a replay after the check runs on the then
 			// current config, where the trigger may be gone.
@@ -161,7 +170,11 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) {
 				e.RunTrigger(ctx, cfg, name, tr)
 			}
 		})
+		if took := e.host.Now().Sub(start); took > slowest.Took {
+			slowest = Slowest{Name: name, Took: took}
+		}
 	}
+	return slowest
 }
 
 // RunTrigger evaluates one trigger that is due, under a span naming it and

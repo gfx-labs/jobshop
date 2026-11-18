@@ -270,6 +270,11 @@ type tickReport struct {
 	Pool map[string]sqlite.PoolWait
 	// Housekeeping names the steps that ran during the tick.
 	Housekeeping []string
+	// SlowestTrigger and TriggerSeconds name the trigger that took longest
+	// in the run_triggers step; set only when that step is the slowest
+	// (#1288).
+	SlowestTrigger string
+	TriggerSeconds float64
 	// SlowCall is the store call that spent longest queued for and holding
 	// the writer, among the slowest step's calls when it made any (#1273).
 	// BlockedBy on it names what held the writer when it began to queue.
@@ -455,6 +460,11 @@ func (r tickReport) attrs() []attribute.KeyValue {
 	if len(r.Holders) > 0 {
 		a = append(a, attribute.StringSlice("jobshop.tick.writer_holders", r.Holders))
 	}
+	if r.SlowestTrigger != "" {
+		a = append(a,
+			attribute.String("jobshop.tick.slowest_trigger", r.SlowestTrigger),
+			attribute.Float64("jobshop.tick.slowest_trigger_seconds", r.TriggerSeconds))
+	}
 	for _, k := range slices.Sorted(maps.Keys(r.PSI)) {
 		a = append(a, attribute.Float64("jobshop.tick.psi_"+k+"_seconds", r.PSI[k].Seconds()))
 	}
@@ -491,8 +501,12 @@ func (c *Controller) endTick(ctx context.Context, span trace.Span, a probeSnap, 
 	}
 	c.statusMu.Lock()
 	steps := maps.Clone(c.tickSteps)
+	trig := c.tickTrigger
 	c.statusMu.Unlock()
 	r := c.probe.report(a, c.probe.snap(), steps)
+	if r.SlowestStep == "run_triggers" && trig.Name != "" {
+		r.SlowestTrigger, r.TriggerSeconds = trig.Name, trig.Took.Seconds()
+	}
 	span.SetAttributes(append(r.attrs(), attribute.Bool("jobshop.tick.slow", true))...)
 	args := append([]any{"seconds", fmt.Sprintf("%.3f", took.Seconds())}, r.logArgs()...)
 	c.log.WarnContext(ctx, "slow tick", args...)
