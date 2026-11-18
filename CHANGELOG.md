@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.39](https://github.com/gfx-labs/jobshop/compare/v0.10.38...v0.10.39) (2026-11-18)
+
+
+### Features
+
+* **control:** name the slowest trigger in a slow tick, skip repeat hook puts ([#1288](https://github.com/gfx-labs/jobshop/issues/1288)) ([#1289](https://github.com/gfx-labs/jobshop/issues/1289)) ([72348ca](https://github.com/gfx-labs/jobshop/commit/72348ca999e2a301dd2a3a52375ea4faab01f0b9))
+
 ## [0.10.38](https://github.com/gfx-labs/jobshop/compare/v0.10.37...v0.10.38) (2026-11-18)
 
 
