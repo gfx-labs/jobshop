@@ -60,9 +60,8 @@ without `process_stalled` when the database was.
 
 - [x] Name the slow step (JOB-221, 2026-11-15): `scan_sessions`, below.
 - [x] Take it off the tick path (JOB-221): it is a housekeeping step now.
-- [ ] Name the substep. The records below predate substep timing. The first
-  `slow scan_sessions` record on selfdev after this lands names it; add it
-  here.
+- [x] Name the substep (2026-11-18, JOB-231): `walk`, the per-directory pass
+  over the session directory. See "Substep" below.
 
 The probe does not change any setting.
 
@@ -106,3 +105,32 @@ scan of `Options.SlowTick` or more logs one `slow scan_sessions` warning with
 the same fields. A tick that overlaps a scan carries
 `housekeeping:scan_sessions` in its `hints`.
 Tests: `TestScanSessionsOffTick`, `TestScanSessionsSlowSubstep`.
+
+## Substep
+
+2026-11-18 (JOB-231). Nine `slow scan_sessions` records on selfdev, 2026-11-16
+17:28 to 2026-11-17 19:43 UTC (`journalctl --no-pager -t jobshop | grep 'slow
+scan_sessions'`, selfdev pids only; the journal also holds another
+controller). None since the controller restarted on 0.10.36 at 23:59 UTC on
+2026-11-17.
+
+| seconds | walk_seconds | dirs | slowest_dir_seconds |
+| -- | -- | -- | -- |
+| 1.08 | 1.08 | 3440 | 0.02 |
+| 1.33 | 1.32 | 3494 | 0.10 |
+| 3.82 | 3.82 | 3495 | 0.03 |
+| 2.02 | 2.02 | 3499 | 0.10 |
+| 2.39 | 2.39 | 3504 | 0.03 |
+| 5.26 | 5.26 | 3526 | 0.05 |
+| 2.55 | 2.55 | 3547 | 0.03 |
+| 1.14 | 1.14 | 3559 | 0.02 |
+| 1.19 | 1.18 | 3640 | 0.06 |
+
+In all nine, `walk` is the whole scan (`list_open` 1 to 2ms, `list_closed` 0,
+`backfill` 0, `backfilled=0`, `orphans=0`). The slowest single directory is
+at most 0.10s, so no one directory (a stuck lock, a large journal) explains
+it: the time is spread over about 3500 directories at 0.3 to 1.5ms each. That
+is (2) in the cause above, not (3). The walk time varies 5x at nearly the same
+directory count, which fits a loaded host, but these records carry no
+pressure fields, so that is a reading, not a finding. The scan runs outside
+`tickMu`, so it no longer delays a tick.
