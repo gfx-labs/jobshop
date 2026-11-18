@@ -297,7 +297,11 @@ func (e *Engine) Eval(ctx context.Context, cfg *config.Config, name string, tr c
 		if lastT != nil && lastT.ClosedAt.After(base) {
 			base = lastT.ClosedAt
 		}
-		if until := base.Add(config.Duration(tr.Cooldown, 0)); !base.IsZero() && now.Before(until) {
+		cd, err := e.cooldownFor(ctx, name, tr, base)
+		if err != nil {
+			return st, err
+		}
+		if until := base.Add(cd); !base.IsZero() && now.Before(until) {
 			st.Why = "cooldown until " + until.UTC().Format(time.RFC3339)
 			return st, nil
 		}
@@ -310,7 +314,11 @@ func (e *Engine) Eval(ctx context.Context, cfg *config.Config, name string, tr c
 			st.Why = "ticket " + lastT.ID + " closed during evaluation"
 			return st, nil
 		}
-		until := lastT.ClosedAt.Add(config.Duration(tr.Cooldown, 0))
+		cd, err := e.cooldownFor(ctx, name, tr, lastT.ClosedAt)
+		if err != nil {
+			return st, err
+		}
+		until := lastT.ClosedAt.Add(cd)
 		if now.Before(until) {
 			st.Why = "cooldown until " + until.UTC().Format(time.RFC3339)
 			return st, nil

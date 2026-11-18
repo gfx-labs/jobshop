@@ -474,3 +474,85 @@ func TestTriggerLearningsFiltered(t *testing.T) {
 	require.NoError(t, learn("failure", "pool:learn"))
 	passUntil(t, root.Dir, func() bool { return len(runs()) == 1 }, "trigger")
 }
+
+const backoffYAML = `projects:
+  js: {}
+agents:
+  fake:
+    command: false
+pools:
+  dev:
+    agent: fake
+    dir: %[1]q
+  plan:
+    agent: fake
+    dir: %[1]q
+triggers:
+  replan:
+    when:
+      pool: dev
+      ready_below: 1
+    ticket:
+      pool: plan
+      title: Plan next step
+    cooldown: 10m
+    cooldown_max: 40m
+`
+
+// TestTriggerCooldownMax: passes after which nothing else changed space out
+// (10m, 20m, then the 40m cap), and a ticket created by anyone else resets
+// the wait to the plain cooldown (JOB-229).
+func TestTriggerCooldownMax(t *testing.T) {
+	t.Parallel()
+	dir, err := os.MkdirTemp("", "js")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	require.NoError(t, os.WriteFile(filepath.Join(dir, config.FileName), fmt.Appendf(nil, backoffYAML, dir), 0o600))
+	root := config.Root{Dir: dir}
+	clk := newClock()
+	stop := triggerController(t, root, clk)
+	defer stop()
+	admin := dial(t, root.AdminSocket())
+	plans := func() []domain.Ticket {
+		var all, out []domain.Ticket
+		require.NoError(t, admin.Call(t.Context(), rpc.MethodTicketList, rpc.ListParams{}, &all))
+		for _, tk := range all {
+			if string(tk.Meta) == `{"trigger":{"name":"replan"}}` {
+				out = append(out, tk)
+			}
+		}
+		return out
+	}
+	settle := func() { pass(t, root.Dir, 3) }
+	fires := func(n int) { passUntil(t, root.Dir, func() bool { return len(plans()) == n }, "trigger") }
+	closeNewest := func() {
+		ps := plans()
+		require.NoError(t, admin.Call(t.Context(), rpc.MethodTicketClose, rpc.CloseParams{ID: ps[len(ps)-1].ID}, nil))
+	}
+	held := func(n int, msg string) {
+		settle()
+		assert.Len(t, plans(), n, msg)
+	}
+
+	fires(1)
+	closeNewest()
+	clk.Advance(11 * time.Minute)
+	held(1, "one idle pass: 20m")
+	clk.Advance(10 * time.Minute)
+	fires(2)
+	closeNewest()
+	clk.Advance(31 * time.Minute)
+	held(2, "two idle passes: 40m")
+	clk.Advance(10 * time.Minute)
+	fires(3)
+	closeNewest()
+	clk.Advance(35 * time.Minute)
+	held(3, "capped at 40m")
+
+	// Something else appears: the wait is the plain cooldown again, which
+	// the 36m since the close already cover.
+	var other domain.Ticket
+	require.NoError(t, admin.Call(t.Context(), rpc.MethodTicketCreate, rpc.CreateParams{Title: "new work", Project: "js"}, &other))
+	clk.Advance(time.Minute)
+	fires(4)
+}

@@ -165,6 +165,7 @@ func TestParseTriggers(t *testing.T) {
     when: {pool: dev, ready_below: 1}
     ticket: {pool: dev, title: Plan, priority: 1, labels: [plan]}
     cooldown: 10m
+    cooldown_max: 2h
   nightly:
     when: {cron: "0 6 * * *", timezone: Europe/Berlin}
     ticket: {title: Review}
@@ -173,6 +174,7 @@ func TestParseTriggers(t *testing.T) {
 	r := c.Triggers["replan"]
 	require.NotNil(t, r.When.ReadyBelow)
 	assert.Equal(t, 1, *r.When.ReadyBelow)
+	assert.Equal(t, "2h", r.CooldownMax)
 	assert.Equal(t, "js", r.Ticket.Project, "project from the ticket's pool")
 	assert.Equal(t, "js", c.Triggers["nightly"].Ticket.Project, "project defaults to default_project")
 
@@ -187,6 +189,9 @@ func TestParseTriggers(t *testing.T) {
 		{"unknown ticket pool", trig("    when: {ready_below: 1}\n    ticket: {pool: nope, title: x}\n"), `ticket: unknown pool "nope"`},
 		{"bad cron", trig("    when: {cron: \"61 * * * *\"}\n    ticket: {title: x}\n"), "minute"},
 		{"negative cooldown", trig("    when: {ready_below: 1}\n    ticket: {title: x}\n    cooldown: -1m\n"), "cooldown"},
+		{"cooldown_max without cooldown", trig("    when: {ready_below: 1}\n    ticket: {title: x}\n    cooldown_max: 1h\n"), "cooldown_max needs a cooldown"},
+		{"cooldown_max below cooldown", trig("    when: {ready_below: 1}\n    ticket: {title: x}\n    cooldown: 10m\n    cooldown_max: 5m\n"), "at least as long"},
+		{"bad cooldown_max", trig("    when: {ready_below: 1}\n    ticket: {title: x}\n    cooldown: 10m\n    cooldown_max: soon\n"), "cooldown_max"},
 		{"negative threshold", trig("    when: {open_above: -1}\n    ticket: {title: x}\n"), ">= 0"},
 		{"no title", trig("    when: {ready_below: 1}\n    ticket: {pool: dev}\n"), "title is required"},
 		{"bad timezone", trig("    when: {cron: \"0 6 * * *\", timezone: Mars/Base}\n    ticket: {title: x}\n"), "timezone"},

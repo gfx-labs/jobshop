@@ -137,8 +137,11 @@ package github
 				when: {pool: "dev", ready_below: 1}
 				handler: "\(V.asset_prefix)triggers.star:replan"
 				args: {dev_pool: "dev", plan_pool: "plan"}
-				cooldown: "10m"
-				max_open: 1
+				// Doubles after each pass that changed nothing in the
+				// store, up to 2h (JOB-229).
+				cooldown:     "10m"
+				cooldown_max: "2h"
+				max_open:     1
 			}
 		}
 		"master-red": {

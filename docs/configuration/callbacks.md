@@ -613,6 +613,8 @@ open run in the signal's `repo` is skipped.
 For handler triggers, a terminal invocation consumes its cron/cooldown slot
 even when it returns `[]`. Handler cooldown runs from the later of the
 accepted fire and the close of the newest run or ticket the trigger filed.
+`cooldown_max` makes the cooldown double after each pass that changed nothing
+in the store, up to that cap (JOB-229, `docs/notes/JOB-229-replan-backoff.md`).
 `max_open` counts the trigger's open runs and `create_ticket` tasks, not
 their steps, plus the proposed new batch. A started run's
 `meta.trigger.key` is `<trigger>/<run key>`. An unset
