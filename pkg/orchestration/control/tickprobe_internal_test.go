@@ -1,6 +1,7 @@
 package control
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace/noop"
 
+	"github.com/gfx-labs/jobshop/pkg/domain"
+	"github.com/gfx-labs/jobshop/pkg/storage/store"
 	"github.com/gfx-labs/jobshop/pkg/storage/store/sqlite"
 )
 
@@ -149,4 +152,57 @@ func TestSlowTickLogged(t *testing.T) {
 	assert.Contains(t, out, "slow tick")
 	assert.Contains(t, out, "hints=")
 	assert.Contains(t, out, "slowest_step=")
+}
+
+// clockStore moves the fake clock when the store lists the newest ticket of
+// the named trigger: a trigger that takes seconds, with no sleep.
+type clockStore struct {
+	store.Store
+	clk     *scanClock
+	trigger string
+	cost    time.Duration
+}
+
+func (s clockStore) List(ctx context.Context, f store.Filter) ([]domain.Ticket, error) {
+	if f.MetaValue == s.trigger && f.Order == store.OrderNewest {
+		s.clk.advance(s.cost)
+	}
+	return s.Store.List(ctx, f)
+}
+
+const slowTriggerYAML = quietYAML + `triggers:
+  quick:
+    when: {cron: '0 6 1 1 *'}
+    ticket: {title: quick, pool: dev}
+  molasses:
+    when: {cron: '0 6 1 1 *'}
+    ticket: {title: molasses, pool: dev}
+`
+
+// TestSlowTickNamesTrigger (#1288): a slow tick whose slowest step is
+// run_triggers names the trigger that took longest, and says nothing of
+// triggers when another step was the slowest.
+func TestSlowTickNamesTrigger(t *testing.T) {
+	t.Parallel()
+	var log lockedBuf
+	c, clk, dir := offTickController(t, slowTriggerYAML, &log)
+	c.store = clockStore{Store: c.store, clk: clk, trigger: "molasses", cost: 3 * time.Second}
+	c.probe = newTickProbe(time.Second, filepath.Join(dir, "db"), nil)
+	span := noop.NewTracerProvider().Tracer("test")
+	_, sp := span.Start(t.Context(), "tick")
+
+	c.tickSteps = map[string]float64{"run_triggers": 3.2, "sweep": 0.1}
+	c.testTriggerPass(t)
+	c.endTick(t.Context(), sp, probeSnap{}, 4*time.Second)
+	out := log.String()
+	assert.Contains(t, out, "slowest_trigger=molasses")
+	assert.Contains(t, out, "slowest_trigger_seconds=3")
+	assert.NotContains(t, out, "slowest_trigger=quick")
+
+	seen := len(out)
+	c.tickSteps = map[string]float64{"run_triggers": 0.1, "sweep": 3}
+	c.endTick(t.Context(), sp, probeSnap{}, 4*time.Second)
+	next := log.String()[seen:]
+	assert.Contains(t, next, "slow tick")
+	assert.NotContains(t, next, "slowest_trigger")
 }
