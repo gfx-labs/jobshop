@@ -57,6 +57,13 @@ func TestLearnRPC(t *testing.T) {
 	require.ErrorIs(t, err, domain.ErrInvalid)
 	_, err = c.learnAdd(ctx, sc, rpc.LearnParams{Kind: domain.LearningCorrection, Summary: "  "})
 	require.ErrorIs(t, err, domain.ErrInvalid)
+	// `learn add` and the kind shortcuts all send this call; the CLI prints
+	// the server's error as is (JOB-230).
+	for _, k := range []string{domain.LearningCorrection, domain.LearningFailure, domain.LearningWorkaround} {
+		_, err = c.learnAdd(ctx, sc, rpc.LearnParams{Kind: k, Summary: " None "})
+		require.ErrorIs(t, err, domain.ErrInvalid)
+		require.EqualError(t, err, `store: invalid input: learning summary "None" is a placeholder: skip the call when there is nothing to record`)
+	}
 	_, err = c.learnAdd(ctx, sc, rpc.LearnParams{Kind: domain.LearningCorrection, Summary: "x", Scope: "team:eng"})
 	require.ErrorIs(t, err, domain.ErrInvalid)
 	_, err = c.learnAdd(ctx, sc, rpc.LearnParams{Kind: domain.LearningCorrection, Summary: "x", Ticket: "js-nope"})
