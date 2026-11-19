@@ -76,6 +76,10 @@ func (h triggerHost) Go(fn func())             { h.c.wg.Go(fn) }
 func (h triggerHost) Draining() bool           { return h.c.draining() }
 func (h triggerHost) KickHooks()               { h.c.kickHooks() }
 
+func (h triggerHost) TriggerTook(ctx context.Context, name string, took time.Duration) {
+	h.c.metrics.RecordTrigger(ctx, name, took)
+}
+
 func (h triggerHost) Log() *slog.Logger { return h.c.log }
 
 func (h triggerHost) Hooks() triggers.Callbacks { return h.c.hooks() }

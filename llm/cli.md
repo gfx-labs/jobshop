@@ -456,8 +456,7 @@ Commands:
   system status
     Print the controller's supervisor pass timings as JSON: last_tick,
     tick_seconds, steps (seconds per step), p95_seconds and samples over the
-    last 60 passes. Needs the admin socket or the pool-list grant; a session
-    without it gets a grant error.
+    last 60 passes. Any session or the admin socket may read it.
 
   whoami [flags]
     Show the caller's scope.
@@ -4586,7 +4585,7 @@ Flags:
 ```
 Usage: jobshop system <command> [flags]
 
-Controller status: supervisor pass timings (admin or pool-list grant).
+Controller status: supervisor pass timings (any session).
 
 Flags:
   -h, --help             Show context-sensitive help.
@@ -4601,8 +4600,7 @@ Commands:
   system status
     Print the controller's supervisor pass timings as JSON: last_tick,
     tick_seconds, steps (seconds per step), p95_seconds and samples over the
-    last 60 passes. Needs the admin socket or the pool-list grant; a session
-    without it gets a grant error.
+    last 60 passes. Any session or the admin socket may read it.
 ```
 
 ## jobshop system status
@@ -4612,8 +4610,7 @@ Usage: jobshop system status
 
 Print the controller's supervisor pass timings as JSON: last_tick, tick_seconds,
 steps (seconds per step), p95_seconds and samples over the last 60 passes.
-Needs the admin socket or the pool-list grant; a session without it gets a grant
-error.
+Any session or the admin socket may read it.
 
 Flags:
   -h, --help             Show context-sensitive help.

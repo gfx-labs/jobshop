@@ -74,6 +74,9 @@ type Host interface {
 	Context() context.Context
 	Go(fn func())
 	Draining() bool
+	// TriggerTook records how long one configured trigger took in a Run
+	// (jobshop.trigger.duration, #1292).
+	TriggerTook(ctx context.Context, name string, took time.Duration)
 	// LockTick takes the tick lock for who ("event", "check") working for
 	// trigger, and returns the unlock func.
 	LockTick(ctx context.Context, who, trigger string) func()
@@ -170,7 +173,9 @@ func (e *Engine) Run(ctx context.Context, cfg *config.Config) (slowest Slowest) 
 				e.RunTrigger(ctx, cfg, name, tr)
 			}
 		})
-		if took := e.host.Now().Sub(start); took > slowest.Took {
+		took := e.host.Now().Sub(start)
+		e.host.TriggerTook(ctx, name, took)
+		if took > slowest.Took {
 			slowest = Slowest{Name: name, Took: took}
 		}
 	}
