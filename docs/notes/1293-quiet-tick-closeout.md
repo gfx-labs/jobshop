@@ -61,7 +61,7 @@ about 36ms each, so the step's mean goes from 200ms to about 130ms. Still
 over 0.1s. The next cost is `workflowTickets`: 13ms in each of the four scan
 triggers per tick (about 52ms), listing runs and decoding each one's fields.
 It is a separate change (filter by `f_workflow`, or share the result in a
-pass) and filed as its own issue. Re-measure on the first window of 2h after
+pass) and filed as #1299. Re-measure on the first window of 2h after
 this change is deployed.
 
 The 7.3s pattern is not traced here and not called fixed.
