@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.46](https://github.com/gfx-labs/jobshop/compare/v0.10.45...v0.10.46) (2026-11-19)
+
+
+### Performance
+
+* **store:** read a trigger's newest and open tickets without its history ([#1314](https://github.com/gfx-labs/jobshop/issues/1314)) ([#1316](https://github.com/gfx-labs/jobshop/issues/1316)) ([b92574c](https://github.com/gfx-labs/jobshop/commit/b92574cbeb99e2edd92f48808a3bf0e5210154dd))
+
 ## [0.10.45](https://github.com/gfx-labs/jobshop/compare/v0.10.44...v0.10.45) (2026-11-19)
 
 
