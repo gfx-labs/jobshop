@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.45](https://github.com/gfx-labs/jobshop/compare/v0.10.44...v0.10.45) (2026-11-19)
+
+
+### Performance
+
+* **control:** skip dead closed session dirs in the orphan walk ([#1311](https://github.com/gfx-labs/jobshop/issues/1311)) ([#1312](https://github.com/gfx-labs/jobshop/issues/1312)) ([eb8b54e](https://github.com/gfx-labs/jobshop/commit/eb8b54ee7a1ecca19d8af741ad85b02baa77b845))
+
 ## [0.10.44](https://github.com/gfx-labs/jobshop/compare/v0.10.43...v0.10.44) (2026-11-19)
 
 
