@@ -147,6 +147,9 @@ func source(t string) string {
 	case "tickets":
 		// Parents are set after every ticket is in (self reference).
 		return "SELECT * FROM tickets ORDER BY created_at, id"
+	case "ticket_meta":
+		// SQLite's created_at is an ordering copy (#1314); Postgres has none.
+		return "SELECT ticket_id, pack, mkey, value FROM ticket_meta"
 	}
 	return "SELECT * FROM " + t
 }
