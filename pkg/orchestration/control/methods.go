@@ -785,7 +785,7 @@ func (c *Controller) sessionList(ctx context.Context, sc scope, p rpc.SessionLis
 	// The supervisor pass walks the session directories (JOB-32); a
 	// request only rechecks the hosts it found.
 	orphans := map[string]bool{}
-	for _, id := range c.scannedOrphans(open) {
+	for _, id := range c.scannedOrphans(ctx, open) {
 		orphans[id] = true
 	}
 
@@ -1004,7 +1004,7 @@ func (c *Controller) sessionReap(ctx context.Context, sc scope, p rpc.SessionRea
 	if err != nil {
 		return nil, err
 	}
-	for _, id := range c.orphans(open) {
+	for _, id := range c.orphans(ctx, open) {
 		if !p.DryRun {
 			c.log.WarnContext(ctx, "stopping orphaned host", "session", id)
 			c.stopHost(c.root.SessionDir(id))

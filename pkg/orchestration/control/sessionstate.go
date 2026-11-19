@@ -107,7 +107,7 @@ func (c *Controller) scanSessions(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	orphans := c.orphansWith(open, func(id string, took time.Duration) {
+	orphans := c.orphansWith(ctx, open, func(id string, took time.Duration) {
 		tm.Dirs++
 		if took > tm.SlowestDir {
 			tm.SlowestDir, tm.SlowestDirID = took, id
@@ -185,12 +185,12 @@ func (c *Controller) backfillEnded(ctx context.Context, orphans []string, tm *sc
 
 // scannedOrphans returns the last pass's orphaned host ids. Before the
 // first pass it walks the directories itself.
-func (c *Controller) scannedOrphans(open []domain.Ticket) []string {
+func (c *Controller) scannedOrphans(ctx context.Context, open []domain.Ticket) []string {
 	c.sessScanMu.Lock()
 	ids, ok := slices.Clone(c.sessOrphans), c.sessScanned
 	c.sessScanMu.Unlock()
 	if !ok {
-		return c.orphans(open)
+		return c.orphans(ctx, open)
 	}
 	return ids
 }

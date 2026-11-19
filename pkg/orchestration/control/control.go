@@ -235,6 +235,12 @@ type Controller struct {
 	sessOrphans []string
 	sessScanned bool
 	endedFilled bool
+	// sessDead is the session directories whose ticket is closed and
+	// host dead: the orphan walk skips them (#1311).
+	deadMu   sync.Mutex
+	sessDead map[string]bool
+	// hostAlive, if set, replaces session.HostAlive in the orphan walk.
+	hostAlive func(dir string) bool
 	// scanHook, if set, runs at the end of each scan_sessions substep
 	// with its name (tests move a fake clock there, JOB-221).
 	scanHook func(substep string)
@@ -587,7 +593,7 @@ func (c *Controller) serve() error {
 		// Adopts a live host, or restarts the agent and resumes it.
 		c.drive(startCfg, t)
 	}
-	c.reapOrphans(open)
+	c.reapOrphans(c.ctx, open)
 	// After adoption, before the first pass spawns anything (#728).
 	c.preflightPools(c.ctx)
 	if err := c.backfillGitHubRepo(c.ctx); err != nil {
