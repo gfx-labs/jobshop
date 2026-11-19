@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.44](https://github.com/gfx-labs/jobshop/compare/v0.10.43...v0.10.44) (2026-11-19)
+
+
+### Bug fixes
+
+* **desk:** bound closed chats by --chat-history (JOB-233) ([#1309](https://github.com/gfx-labs/jobshop/issues/1309)) ([afeb3bd](https://github.com/gfx-labs/jobshop/commit/afeb3bdfaf4b44adf51cd10f2221dca2bfbaff8c))
+
 ## [0.10.43](https://github.com/gfx-labs/jobshop/compare/v0.10.42...v0.10.43) (2026-11-19)
 
 
