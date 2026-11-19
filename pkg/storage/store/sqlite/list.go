@@ -108,6 +108,13 @@ func listQuery(f store.Filter, now int64) (*bqb.Query, error) {
 	}
 	eq("project", f.Project)
 	eq("pool", f.Pool)
+	if f.Holder != "" {
+		// tickets_holder is a partial index (holder <> ''). SQLite cannot
+		// tell from a bound value that it holds, so without the literal
+		// term it walked the priority index for a holder with no tickets,
+		// 12ms a session on selfdev (#1293).
+		w.And("t.holder <> ''")
+	}
 	eq("holder", f.Holder)
 	eq("parent_id", f.ParentID)
 	eq("created_by", f.CreatedBy)
