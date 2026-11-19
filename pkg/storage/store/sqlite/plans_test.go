@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/gfx-labs/jobshop/pkg/domain"
 	"github.com/gfx-labs/jobshop/pkg/storage/store"
 	"github.com/gfx-labs/jobshop/pkg/storage/store/sqlite"
 )
@@ -151,5 +152,47 @@ func TestTicketMetaPlan(t *testing.T) {
 		require.NoError(t, err)
 		p := explain(t, db, q, args...)
 		require.NotContains(t, p, "SCAN t ", "%+v: %s", f, p)
+	}
+}
+
+// TestTicketHolderPlan checks a List by holder reads tickets_holder, a
+// partial index on non-empty holders. A bound holder does not prove that, so
+// without the literal term in the query SQLite walked the priority index
+// for a session that holds nothing: 12ms a session on selfdev, per scan
+// trigger per tick (#1293).
+func TestTicketHolderPlan(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	path := testPath(t)
+	s, err := sqlite.Open(ctx, path, sqlite.Options{})
+	require.NoError(t, err)
+	var g store.Graph
+	for i := range 1500 {
+		prio := i % 5
+		nt := store.NewTicket{Project: "js", Kind: "task", Title: "x", Priority: &prio}
+		if i%100 == 0 {
+			nt.Holder = fmt.Sprintf("s%d", i)
+		}
+		g.Tickets = append(g.Tickets, nt)
+	}
+	_, err = s.Apply(ctx, "test", g)
+	require.NoError(t, err)
+	require.NoError(t, s.Close())
+	s, err = sqlite.Open(ctx, path, sqlite.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=query_only(1)")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	for _, f := range []store.Filter{
+		{Holder: "s-never", Status: "in_progress", Limit: 1},
+		{Holder: "s100", Status: "in_progress"},
+		{Holder: "s-never", Statuses: []domain.Status{"in_progress", "open"}},
+	} {
+		q, args, err := sqlite.TicketListSQL(s, f)
+		require.NoError(t, err)
+		p := explain(t, db, q, args...)
+		require.Contains(t, p, "tickets_holder", "%+v: %s", f, p)
 	}
 }
