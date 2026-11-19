@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.40](https://github.com/gfx-labs/jobshop/compare/v0.10.39...v0.10.40) (2026-11-19)
+
+
+### Features
+
+* **control:** agent sessions read system status; per-trigger duration metric ([#1292](https://github.com/gfx-labs/jobshop/issues/1292)) ([#1295](https://github.com/gfx-labs/jobshop/issues/1295)) ([c99a910](https://github.com/gfx-labs/jobshop/commit/c99a910b0cd7b5b0ea9d7887abfc953f0203f199))
+
 ## [0.10.39](https://github.com/gfx-labs/jobshop/compare/v0.10.38...v0.10.39) (2026-11-18)
 
 
