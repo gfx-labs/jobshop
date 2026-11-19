@@ -88,6 +88,10 @@ type Metrics struct {
 	// journal compression, store maintenance), run outside the supervisor
 	// pass (JOB-197).
 	Housekeeping metric.Float64Histogram
+	// TriggerDuration is the time one trigger took in the trigger step of
+	// a pass, by trigger name (#1292). Names come from the config, so the
+	// label set is bounded by the configured triggers.
+	TriggerDuration metric.Float64Histogram
 }
 
 // secondBuckets are the boundaries of every duration histogram. The
@@ -113,7 +117,7 @@ func NewMetricsFor(res *resource.Resource) (*Metrics, error) {
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithResource(orDefault(res)), sdkmetric.WithReader(exp))
 	meter := mp.Meter("github.com/gfx-labs/jobshop")
 	m := &Metrics{provider: mp, handler: promhttp.HandlerFor(reg, promhttp.HandlerOpts{})}
-	var errs [31]error
+	var errs [32]error
 	m.Sessions, errs[0] = meter.Int64Gauge("jobshop.sessions", metric.WithDescription("Open sessions by pool and state."))
 	m.Restarts, errs[1] = meter.Int64Counter("jobshop.session.restarts", metric.WithDescription("Session agent or host restarts."))
 	m.Ready, errs[2] = meter.Int64Gauge("jobshop.tickets.ready", metric.WithDescription("Ready tickets per pool, from the supervisor tick."))
@@ -171,6 +175,8 @@ func NewMetricsFor(res *resource.Resource) (*Metrics, error) {
 		metric.WithDescription("Calls run off the supervisor pass that ran out their timeout, by poller (JOB-103)."))
 	m.Housekeeping, errs[30] = meter.Float64Histogram("jobshop.housekeeping.duration", metric.WithUnit("s"), secondBuckets,
 		metric.WithDescription("Housekeeping step duration by step, run outside the supervisor tick (JOB-197)."))
+	m.TriggerDuration, errs[31] = meter.Float64Histogram("jobshop.trigger.duration", metric.WithUnit("s"), secondBuckets,
+		metric.WithDescription("Time one trigger took in the trigger step of a pass, by trigger (#1292)."))
 	for _, err := range errs {
 		if err != nil {
 			return nil, err

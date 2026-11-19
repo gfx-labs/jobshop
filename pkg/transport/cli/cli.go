@@ -114,7 +114,7 @@ type root struct {
 	Linear    linearCmd    `cmd:"" help:"Read, comment on and move Linear issues as the identity for their team."`
 	Recall    recallCmd    `cmd:"" help:"Search past comments, session journals and learnings. Run it on a failure and before asking a human."`
 	Journal   journalCmd   `cmd:"" help:"Search every session's journal with LogsQL on VictoriaLogs (journal.victorialogs), and backfill it."`
-	System    systemCmd    `cmd:"" help:"Controller status: supervisor pass timings (admin or pool-list grant)."`
+	System    systemCmd    `cmd:"" help:"Controller status: supervisor pass timings (any session)."`
 	Whoami    whoamiCmd    `cmd:"" help:"Show the caller's scope."`
 	Version   versionCmd   `cmd:"" help:"Print version information."`
 	Help      helpCmd      `cmd:"" help:"Show help for a command, from the same text as --help: jobshop help linear assign."`
