@@ -344,15 +344,17 @@ func (o ownTickets) has(id string) bool { return o.ids[id] }
 func (e *Engine) workflowTickets(ctx context.Context, workflow string) (ownTickets, error) {
 	s := e.host.Store()
 	o := ownTickets{runs: map[string]bool{}, ids: map[string]bool{}}
-	runs, err := s.List(ctx, store.Filter{Kind: domain.KindRun})
+	if workflow == "" {
+		// An empty Filter.Workflow matches every run.
+		return o, nil
+	}
+	// The store matches the workflow column, so only this workflow's runs
+	// are read, and none is cut off by the default limit (#1299).
+	runs, err := s.List(ctx, store.Filter{Kind: domain.KindRun, Workflow: workflow, Limit: store.NoLimit})
 	if err != nil {
 		return o, err
 	}
 	for _, r := range runs {
-		f, err := domain.DecodeFields[domain.RunFields](r)
-		if err != nil || f.Workflow != workflow {
-			continue
-		}
 		o.runs[r.ID], o.ids[r.ID] = true, true
 		if r.Status == domain.StatusClosed {
 			continue
