@@ -62,3 +62,43 @@ test('issue-started run shows no PR, then the PR its step records, without a rel
     await call('run.cancel', { id: run.id });
   }
 });
+
+// A run whose PR links could not be read shows a marker, not the dash that
+// means no PR yet (#1294). The states come from a mocked overview: the
+// controller reads its own store, so it cannot be made to fail here.
+test('in-flight table separates unavailable PR data from no PR yet (#1294)', async ({ page, isMobile }) => {
+  const at = '2026-11-19T00:00:00Z';
+  const run = (n, title, pr_state, links) => ({
+    run: { id: `js-pr-state-${n}`, project: 'js', kind: 'run', title, status: 'open', fields: { state: 'running', vars: { issue: String(n) } }, created_at: at, updated_at: at },
+    steps: [],
+    links,
+    pr_state,
+  });
+  const runs = [
+    run(1, 'Run without a PR', 'none'),
+    run(2, 'Run with unreadable PR data', 'unavailable'),
+    run(3, 'Run with a PR', 'linked', ['https://github.com/acme/widget/pull/3']),
+  ];
+  await page.route('**/api/live**', (route) => route.fulfill({
+    status: 200,
+    headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-store' },
+    body: `event: overview\ndata: ${JSON.stringify({ runs, truncated: false })}\n\n`,
+  }));
+  await page.goto('./');
+  if (isMobile) await page.getByRole('navigation', { name: 'Mobile' }).getByRole('button', { name: 'in flight', exact: true }).click();
+  const row = (title) => page.getByRole('region', { name: 'In flight', exact: true }).getByRole('row').filter({ hasText: title });
+  const marker = (title) => row(title).locator('.pr-unavailable').locator('visible=true');
+
+  await expect(row('Run with a PR').locator('a[href$="/pull/3"]').locator('visible=true')).toHaveText('widget#3');
+  await expect(row('Run with a PR').locator('.pr-unavailable')).toHaveCount(0);
+
+  await expect(marker('Run with unreadable PR data')).toHaveCount(1);
+  await expect(marker('Run with unreadable PR data')).toHaveText('pr unavailable');
+  await expect(marker('Run with unreadable PR data')).toHaveAttribute('title', /could not be read/);
+  await expect(row('Run with unreadable PR data').locator('a[href*="/pull/"]')).toHaveCount(0);
+
+  await expect(row('Run without a PR')).toBeVisible();
+  await expect(row('Run without a PR').locator('.pr-unavailable')).toHaveCount(0);
+  if (!isMobile) await expect(row('Run without a PR').locator('td.ref-col').nth(1)).toHaveText('–');
+  else await expect(row('Run without a PR').locator('a[href*="/pull/"]')).toHaveCount(0);
+});

@@ -582,7 +582,9 @@ func TestRunShowStepPRLinks(t *testing.T) {
 	r := startRun(t, admin, rpc.RunStartParams{Workflow: "pr", Vars: map[string]string{"issue": "42"}})
 	step := r.Steps[0].ID
 	links := func() []string { return showRun(t, admin, r.Run.ID).Links }
+	state := func() string { return showRun(t, admin, r.Run.ID).PRState }
 	assert.NotContains(t, strings.Join(links(), " "), "/pull/", "no PR yet, none invented")
+	assert.Equal(t, rpc.PRNone, state(), "the lookup worked and found no PR")
 
 	comment := func(body string) {
 		t.Helper()
@@ -590,9 +592,11 @@ func TestRunShowStepPRLinks(t *testing.T) {
 	}
 	comment("see also https://github.com/acme/widget/pull/99 for context")
 	assert.NotContains(t, strings.Join(links(), " "), "/pull/99", "a mention is not the run's PR")
+	assert.Equal(t, rpc.PRNone, state(), "a mention is not a link")
 
 	comment("PR https://github.com/acme/widget/pull/7 head abc123")
 	assert.Contains(t, links(), "https://github.com/acme/widget/pull/7")
+	assert.Equal(t, rpc.PRLinked, state())
 
 	require.NoError(t, admin.Call(t.Context(), rpc.MethodWaitAdd, rpc.WaitAddParams{
 		ID:     step,

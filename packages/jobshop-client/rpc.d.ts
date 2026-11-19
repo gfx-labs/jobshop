@@ -1355,6 +1355,7 @@ export interface RunResult {
   run: Ticket;
   steps: Ticket[];
   links?: string[];
+  pr_state?: string;
   existing?: boolean;
   waits?: ResourceWait[];
 }

@@ -527,7 +527,7 @@ func (c *Controller) runShow(ctx context.Context, sc scope, p rpc.IDParams) (any
 	if err != nil {
 		return result, err
 	}
-	result.Links, err = c.runLinks(ctx, t, result.Steps)
+	result.Links, result.PRState, err = c.runLinks(ctx, t, result.Steps)
 	return result, err
 }
 

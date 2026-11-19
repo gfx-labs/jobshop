@@ -315,6 +315,19 @@ function InFlight() {
   );
 }
 
+// PRUnavailable marks a run whose PR links could not be read (#1294). A
+// run with no PR yet keeps the dash.
+function PRUnavailable({ className }: { className?: string }) {
+  return (
+    <span
+      className={'pr-unavailable ' + (className || '')}
+      title="The PR link data could not be read, so a PR may exist. This is not the same as no PR yet."
+    >
+      pr unavailable
+    </span>
+  );
+}
+
 const FlightRow = memo(function FlightRow({ row, now }: { row: Flight; now: number }) {
   const setWatched = useSetAtom(watchedSessionAtom);
   const session = useAtomValue(liveSessionAtom(row.holder));
@@ -344,6 +357,7 @@ const FlightRow = memo(function FlightRow({ row, now }: { row: Flight; now: numb
             {pr.label}
           </a>
         ))}
+        {!row.prs.length && row.prState === 'unavailable' && <PRUnavailable className="ticket-issue ref-stack" />}
       </td>
       <td className="ref-col">
         {row.issueURL ? (
@@ -355,16 +369,20 @@ const FlightRow = memo(function FlightRow({ row, now }: { row: Flight; now: numb
         )}
       </td>
       <td className="ref-col">
-        {row.prs.length
-          ? row.prs.map((pr, i) => (
-              <span key={pr.url}>
-                {i ? ', ' : ''}
-                <a href={pr.url} {...ext}>
-                  {pr.label}
-                </a>
-              </span>
-            ))
-          : '–'}
+        {row.prs.length ? (
+          row.prs.map((pr, i) => (
+            <span key={pr.url}>
+              {i ? ', ' : ''}
+              <a href={pr.url} {...ext}>
+                {pr.label}
+              </a>
+            </span>
+          ))
+        ) : row.prState === 'unavailable' ? (
+          <PRUnavailable />
+        ) : (
+          '–'
+        )}
       </td>
       <td>{row.step}</td>
       <td className={'activity ' + activity.kind} data-activity={activity.kind}>

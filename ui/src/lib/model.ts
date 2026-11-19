@@ -34,6 +34,8 @@ export interface Flight {
   ref: string;
   repo: string;
   prs: PRLink[];
+  // The controller's pr_state: none, unavailable or linked (#1294).
+  prState: string;
   issueURL: string;
   step: string;
   waiting: string;
@@ -90,6 +92,7 @@ export function flights(runs: RunResult[], threshold = 3 * 3600000, now = Date.n
         : run.run.id,
       repo,
       prs: prLinks(run.links),
+      prState: run.pr_state || '',
       issueURL: (run.links || []).find((link) => link.startsWith('https://linear.app/')) || '',
       step: sf.step || 'queued',
       waiting,
