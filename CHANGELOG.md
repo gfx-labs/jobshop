@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.42](https://github.com/gfx-labs/jobshop/compare/v0.10.41...v0.10.42) (2026-11-19)
+
+
+### Performance
+
+* **store:** use tickets_holder for List by holder ([#1293](https://github.com/gfx-labs/jobshop/issues/1293)) ([#1300](https://github.com/gfx-labs/jobshop/issues/1300)) ([9dae819](https://github.com/gfx-labs/jobshop/commit/9dae8196843f23cbf361ab70194f8e7ec7d347e8))
+* **triggers:** filter workflowTickets runs by workflow in the store ([#1299](https://github.com/gfx-labs/jobshop/issues/1299)) ([#1301](https://github.com/gfx-labs/jobshop/issues/1301)) ([3295b61](https://github.com/gfx-labs/jobshop/commit/3295b61f05e080115e69822528730c360fd5334e))
+
 ## [0.10.41](https://github.com/gfx-labs/jobshop/compare/v0.10.40...v0.10.41) (2026-11-19)
 
 
