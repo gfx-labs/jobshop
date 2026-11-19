@@ -666,6 +666,8 @@ Flags:
       --chat-pool="operator"       type: chat pool for Desk chat (escalation
                                    threads, new sessions). Empty disables
                                    sending.
+      --chat-history=72h           How long closed chats stay in the chat list.
+                                   0 lists open chats only.
       --user-header=STRING         Header an authenticating proxy sets to the
                                    user (e.g. Tailscale-User-Login). Writes
                                    record desk:<user>. Empty: no user.

@@ -19,19 +19,20 @@ import (
 
 type deskCmd struct {
 	LogFlags
-	Action       string   `arg:"" optional:"" help:"View command: navigate, filter, select, attach, expand or collapse. Empty serves Desk."`
-	Args         []string `arg:"" optional:"" help:"View arguments as key=value, for example view=trace ref=js-123."`
-	Session      string   `help:"Named chat session to target. Defaults to the calling agent's session."`
-	Listen       string   `help:"Address to serve on. Non-loopback needs --allow-remote." default:"127.0.0.1:7480"`
-	Host         []string `help:"Extra Host header values to accept (e.g. a tailnet name); loopback is always accepted."`
-	AllowRemote  bool     `help:"Allow a non-loopback listen address. Desk has no login; expose it only on a trusted network."`
-	ChatPool     string   `help:"type: chat pool for Desk chat (escalation threads, new sessions). Empty disables sending." default:"operator"`
-	UserHeader   string   `help:"Header an authenticating proxy sets to the user (e.g. Tailscale-User-Login). Writes record desk:<user>. Empty: no user."`
-	BasePath     string   `help:"URL prefix Desk is served under behind a proxy, e.g. /desk/. The proxy may keep or strip it." default:"/"`
-	TrustedProxy []string `help:"Peer address or CIDR (repeatable) whose --user-header and X-Forwarded-Prefix Desk trusts. Required with --user-header. --base-path wins over X-Forwarded-Prefix."`
-	Push         bool     `help:"Send Web Push notifications for new attention items. Browsers allow push only over HTTPS (or localhost)."`
-	PushSubject  string   `name:"push-subject" help:"VAPID contact push services see (mailto: or https: URL)." default:"mailto:jobshop@localhost"`
-	Favicon      string   `help:"Image file (SVG, PNG or ICO) used as the browser tab icon instead of the built-in one." type:"existingfile"`
+	Action       string        `arg:"" optional:"" help:"View command: navigate, filter, select, attach, expand or collapse. Empty serves Desk."`
+	Args         []string      `arg:"" optional:"" help:"View arguments as key=value, for example view=trace ref=js-123."`
+	Session      string        `help:"Named chat session to target. Defaults to the calling agent's session."`
+	Listen       string        `help:"Address to serve on. Non-loopback needs --allow-remote." default:"127.0.0.1:7480"`
+	Host         []string      `help:"Extra Host header values to accept (e.g. a tailnet name); loopback is always accepted."`
+	AllowRemote  bool          `help:"Allow a non-loopback listen address. Desk has no login; expose it only on a trusted network."`
+	ChatPool     string        `help:"type: chat pool for Desk chat (escalation threads, new sessions). Empty disables sending." default:"operator"`
+	ChatHistory  time.Duration `help:"How long closed chats stay in the chat list. 0 lists open chats only." default:"72h"`
+	UserHeader   string        `help:"Header an authenticating proxy sets to the user (e.g. Tailscale-User-Login). Writes record desk:<user>. Empty: no user."`
+	BasePath     string        `help:"URL prefix Desk is served under behind a proxy, e.g. /desk/. The proxy may keep or strip it." default:"/"`
+	TrustedProxy []string      `help:"Peer address or CIDR (repeatable) whose --user-header and X-Forwarded-Prefix Desk trusts. Required with --user-header. --base-path wins over X-Forwarded-Prefix."`
+	Push         bool          `help:"Send Web Push notifications for new attention items. Browsers allow push only over HTTPS (or localhost)."`
+	PushSubject  string        `name:"push-subject" help:"VAPID contact push services see (mailto: or https: URL)." default:"mailto:jobshop@localhost"`
+	Favicon      string        `help:"Image file (SVG, PNG or ICO) used as the browser tab icon instead of the built-in one." type:"existingfile"`
 }
 
 // Run serves Jobshop Desk over the admin socket (#202).
@@ -76,7 +77,7 @@ func (c deskCmd) Run(g *Globals) error {
 	}
 	defer func() { _ = tel.Shutdown(context.WithoutCancel(ctx)) }()
 	log := tel.Log.With("component", "desk")
-	cfg := desk.Config{Hosts: c.Host, ChatPool: c.ChatPool, UserHeader: c.UserHeader, BasePath: base, TrustedProxies: proxies, Root: r.Dir}
+	cfg := desk.Config{Hosts: c.Host, ChatPool: c.ChatPool, ChatHistory: c.ChatHistory, UserHeader: c.UserHeader, BasePath: base, TrustedProxies: proxies, Root: r.Dir}
 	if c.Favicon != "" {
 		if cfg.Favicon, err = os.ReadFile(c.Favicon); err != nil {
 			return fmt.Errorf("desk: --favicon: %w", err)

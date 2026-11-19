@@ -60,6 +60,8 @@ type Config struct {
 	// ChatPool is the type: chat pool Desk chats with (escalation keys and
 	// new desk:<id> sessions). Empty: chat is read-only.
 	ChatPool string
+	// ChatHistory is how long closed chats stay listed. Zero: open chats only.
+	ChatHistory time.Duration
 	// Push sends Web Push notifications for new attention items. Nil: off.
 	Push *Push
 	// UserHeader names the header an authenticating proxy sets to the
