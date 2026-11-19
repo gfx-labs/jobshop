@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.41](https://github.com/gfx-labs/jobshop/compare/v0.10.40...v0.10.41) (2026-11-19)
+
+
+### Features
+
+* **desk:** show PR unavailable apart from no PR yet on in-flight runs ([#1294](https://github.com/gfx-labs/jobshop/issues/1294)) ([#1296](https://github.com/gfx-labs/jobshop/issues/1296)) ([e0da5b1](https://github.com/gfx-labs/jobshop/commit/e0da5b18d3bf5900e0941d44c4d47ed73ce74326))
+
 ## [0.10.40](https://github.com/gfx-labs/jobshop/compare/v0.10.39...v0.10.40) (2026-11-19)
 
 
