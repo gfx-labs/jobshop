@@ -285,15 +285,24 @@ type ChatSession struct {
 }
 
 func (s *Server) chatList(r *http.Request) (any, error) {
-	var list []rpc.SessionInfo
-	if err := s.ctl.Call(r.Context(), rpc.MethodSessionList, rpc.SessionListParams{All: true}, &list); err != nil {
+	// Open sessions, then closed ones within ChatHistory. The full closed
+	// history outgrows the admin socket's 10 MiB message limit (JOB-233).
+	var list, closed []rpc.SessionInfo
+	if err := s.ctl.Call(r.Context(), rpc.MethodSessionList, rpc.SessionListParams{}, &list); err != nil {
 		return nil, err
 	}
+	if s.cfg.ChatHistory > 0 {
+		if err := s.ctl.Call(r.Context(), rpc.MethodSessionList, rpc.SessionListParams{Since: s.cfg.ChatHistory}, &closed); err != nil {
+			return nil, err
+		}
+	}
 	out := []ChatSession{}
-	for _, si := range list {
-		if si.Ticket == nil {
+	seen := map[string]bool{}
+	for _, si := range append(list, closed...) {
+		if si.Ticket == nil || seen[si.ID] {
 			continue
 		}
+		seen[si.ID] = true
 		f, _ := domain.DecodeFields[domain.SessionFields](*si.Ticket)
 		if !conversation.Managed(f.Key) {
 			continue

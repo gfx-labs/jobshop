@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -132,12 +133,16 @@ func TestChatList(t *testing.T) {
 		sess("s1", "operator", "matrix:!r:$e"), sess("s2", "dev", ""), sess("s3", "operator", "desk:abc"),
 		sess("s4", "esc-chat", "escalation:js-e"),
 	}}}
-	h := New(Config{ChatPool: "operator"}, ctl, nil).Handler()
+	h := New(Config{ChatPool: "operator", ChatHistory: time.Hour}, ctl, nil).Handler()
 	var out struct {
 		Pool     string        `json:"pool"`
 		Sessions []ChatSession `json:"sessions"`
 	}
 	get(t, h, "/api/chat", &out)
+	assert.Equal(t, []string{
+		rpc.MethodSessionList + " {}",
+		rpc.MethodSessionList + ` {"since":3600000000000}`,
+	}, ctl.calls, "closed chats are bounded by ChatHistory, never the full history")
 	assert.Equal(t, "operator", out.Pool)
 	require.Len(t, out.Sessions, 2)
 	assert.Equal(t, "desk:abc", out.Sessions[0].Key)
