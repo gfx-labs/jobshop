@@ -287,13 +287,23 @@ func stepPRLinks(t domain.Ticket, comments []domain.Comment) []string {
 }
 
 // runLinks are a run's links: what its vars and meta name, plus the PRs
-// its steps recorded after it started (JOB-131), in step order.
-func (c *Controller) runLinks(ctx context.Context, run domain.Ticket, steps []domain.Ticket) ([]string, error) {
+// its steps recorded after it started (JOB-131), in step order. The state
+// tells "no PR yet" from "could not tell" (#1294): a step whose comments
+// cannot be read, or a run with no steps to read, leaves the lookup
+// incomplete, so with no PR found the state is unavailable, not none. A
+// read error does not fail the call: the links found elsewhere still show.
+// Only the caller's cancelled context does.
+func (c *Controller) runLinks(ctx context.Context, run domain.Ticket, steps []domain.Ticket) ([]string, string, error) {
 	links := graphLinks(c.config(), run, nil)
+	complete := len(steps) > 0
 	for _, s := range steps {
 		th, err := c.store.Thread(ctx, s.ID, store.Parts{Comments: true})
 		if err != nil {
-			return nil, err
+			if ctx.Err() != nil {
+				return nil, "", err
+			}
+			c.log.WarnContext(ctx, "run PR links: step comments unreadable", "run", run.ID, "step", s.ID, "err", err)
+			complete = false
 		}
 		for _, link := range stepPRLinks(s, th.Comments) {
 			if !slices.Contains(links, link) {
@@ -301,5 +311,12 @@ func (c *Controller) runLinks(ctx context.Context, run domain.Ticket, steps []do
 			}
 		}
 	}
-	return links, nil
+	state := rpc.PRNone
+	switch {
+	case slices.ContainsFunc(links, func(l string) bool { return strings.Contains(l, "/pull/") }):
+		state = rpc.PRLinked
+	case !complete:
+		state = rpc.PRUnavailable
+	}
+	return links, state, nil
 }

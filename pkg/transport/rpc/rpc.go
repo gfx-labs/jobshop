@@ -1449,11 +1449,21 @@ type RunCancelParams struct {
 	Reason string `json:"reason,omitempty"`
 }
 
+// PRState values of RunResult.PRState.
+const (
+	PRNone        = "none"        // the lookup worked and found no PR
+	PRUnavailable = "unavailable" // the lookup failed or its data is absent
+	PRLinked      = "linked"      // at least one PR link
+)
+
 // RunResult is a run ticket and its steps in order.
 type RunResult struct {
 	Run   domain.Ticket   `json:"run"`
 	Steps []domain.Ticket `json:"steps"`
 	Links []string        `json:"links,omitempty"`
+	// PRState is set by run.show: PRNone, PRUnavailable or PRLinked. Desk
+	// shows a dash for none and a marker for unavailable (#1294).
+	PRState string `json:"pr_state,omitempty"`
 	// Existing is true when start returned an open run for the key.
 	Existing bool `json:"existing,omitempty"`
 	// Waits are steps held back by a full resource (#408).

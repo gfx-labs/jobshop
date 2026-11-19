@@ -722,6 +722,7 @@ span.ticket-status { display: inline-block; }
 /* Reference columns (issue, pr) need room: the table's own width decides,
    not the viewport, so an open chat rail or a narrow window stacks them under
    the title instead. Each link is in the DOM twice and only one is shown. */
+.pr-unavailable { color: var(--muted); font-style: italic; cursor: help; }
 .table-scroll.refs { container: refs / inline-size; }
 .ref-col { display: none; }
 @container refs (min-width: 720px) {
