@@ -190,6 +190,9 @@ type Controller struct {
 	// PRs of repos for it; nil means GitHub.
 	learnExpiredAt time.Time
 	learnRefs      func(ctx context.Context, cfg *config.Config, repos []string) ([]string, error)
+	// commentMu makes commentOnce's check and add one step: the resume
+	// hook and the sweep can settle the same escalation at once.
+	commentMu sync.Mutex
 	// slotClient is the resource provider client (#407); see slots().
 	slotClient *slotprovider.Client
 	slotsOnce  sync.Once

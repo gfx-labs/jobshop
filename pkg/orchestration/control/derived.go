@@ -140,6 +140,8 @@ func (c *Controller) closeDerived(ctx context.Context, t domain.Ticket, resoluti
 // commentOnce adds text as the controller's comment on id unless it is
 // already there.
 func (c *Controller) commentOnce(ctx context.Context, id, text string) {
+	c.commentMu.Lock()
+	defer c.commentMu.Unlock()
 	comments, err := store.Comments(ctx, c.store, id)
 	if err != nil {
 		return
