@@ -6,7 +6,8 @@ import (
 )
 
 const addTicketMeta = `-- name: AddTicketMeta :exec
-INSERT INTO ticket_meta (ticket_id, pack, mkey, value) VALUES ($1, $2, $3, $4)
+INSERT INTO ticket_meta (ticket_id, pack, mkey, value, created_at)
+SELECT $1, $2, $3, $4, t.created_at FROM tickets t WHERE t.id = $1
 `
 
 // AddTicketMetaParams are the arguments of AddTicketMeta.

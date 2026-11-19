@@ -121,11 +121,21 @@ func listQuery(f store.Filter, now int64) (*bqb.Query, error) {
 	eq("f_key", f.Key)
 	eq("f_workflow", f.Workflow)
 	eq("f_state", f.State)
-	if ks := filterKinds(f); len(ks) > 0 {
+	ks := filterKinds(f)
+	if len(ks) > 0 {
 		w.And("t.kind IN (?)", ks)
 	}
 	ss := filterStatuses(f)
+	// Open work is a few tickets: a meta filter on it starts from them
+	// (openMeta). Otherwise a newest or oldest list starts from the
+	// meta index, which holds created_at (metaOrdered).
+	openMeta := len(metas) > 0 && len(ks) > 0 && onlyOpen(ss)
+	metaOrdered := len(metas) > 0 && !openMeta && (order == store.OrderNewest || order == store.OrderOldest)
 	switch {
+	case openMeta:
+		// tickets_kind(kind, status) needs the equality form; the
+		// <> 'closed' form below made SQLite scan tickets.
+		w.And("t.status IN (?)", ss)
 	case len(ss) == 2 && ((ss[0] == "open" && ss[1] == "in_progress") || (ss[0] == "in_progress" && ss[1] == "open")):
 		// The same set, written as the partial indexes on open work
 		// (tickets_run_key) are, so SQLite can use them.
@@ -158,9 +168,17 @@ func listQuery(f store.Filter, now int64) (*bqb.Query, error) {
 	if f.Label != "" {
 		w.And("t.id IN (SELECT l.ticket_id FROM labels l WHERE l.label = ?)", f.Label)
 	}
-	for _, m := range metas {
-		w.And("t.id IN (SELECT m.ticket_id FROM ticket_meta m WHERE m.pack = ? AND m.mkey = ? AND m.value = ?)",
-			m.Pack, m.Key, m.Value)
+	for i, m := range metas {
+		switch {
+		case openMeta:
+			w.And("EXISTS (SELECT 1 FROM ticket_meta m WHERE m.ticket_id = t.id AND m.pack = ? AND m.mkey = ? AND m.value = ?)",
+				m.Pack, m.Key, m.Value)
+		case metaOrdered && i == 0:
+			w.And("m0.pack = ? AND m0.mkey = ? AND m0.value = ?", m.Pack, m.Key, m.Value)
+		default:
+			w.And("t.id IN (SELECT m.ticket_id FROM ticket_meta m WHERE m.pack = ? AND m.mkey = ? AND m.value = ?)",
+				m.Pack, m.Key, m.Value)
+		}
 	}
 	repoFilter(w, f.Repo, f.RepoNotIn)
 	if f.Ready {
@@ -182,12 +200,18 @@ func listQuery(f store.Filter, now int64) (*bqb.Query, error) {
 		}
 	case store.OrderNewest:
 		by = "t.created_at DESC, t.id DESC"
+		if metaOrdered {
+			by = "m0.created_at DESC, m0.ticket_id DESC"
+		}
 		if f.After != "" {
 			w.And(`EXISTS (SELECT 1 FROM tickets a WHERE a.id = ?
       AND (t.created_at < a.created_at OR (t.created_at = a.created_at AND t.id < a.id)))`, f.After)
 		}
 	case store.OrderOldest:
 		by = "t.created_at, t.id"
+		if metaOrdered {
+			by = "m0.created_at, m0.ticket_id"
+		}
 		if f.After != "" {
 			w.And(`EXISTS (SELECT 1 FROM tickets a WHERE a.id = ?
       AND (t.created_at > a.created_at OR (t.created_at = a.created_at AND t.id > a.id)))`, f.After)
@@ -200,7 +224,14 @@ func listQuery(f store.Filter, now int64) (*bqb.Query, error) {
 	default:
 		return nil, fmt.Errorf("%w: order %q", domain.ErrInvalid, order)
 	}
-	q := bqb.New("SELECT "+ticketCols+" FROM tickets t ?", w)
+	from := "tickets t"
+	if metaOrdered {
+		// CROSS JOIN fixes the order: ticket_meta_newest yields the
+		// candidates already sorted, the limit stops the walk early, and
+		// no sort reads every candidate's ticket row (#1314).
+		from = "ticket_meta m0 CROSS JOIN tickets t ON t.id = m0.ticket_id"
+	}
+	q := bqb.New("SELECT "+ticketCols+" FROM "+from+" ?", w)
 	q.Space("ORDER BY " + by)
 	if f.Limit >= 0 {
 		// CAST keeps the statement text the same for every limit: a bare
@@ -315,4 +346,14 @@ func (s *Store) claimCandidate(ctx context.Context, tx *sql.Tx, req store.ClaimN
 		return "", sql.ErrNoRows
 	}
 	return rows[0].ID, nil
+}
+
+// onlyOpen reports whether ss names statuses and all of them are open work.
+func onlyOpen(ss []string) bool {
+	for _, s := range ss {
+		if s != string(domain.StatusOpen) && s != string(domain.StatusInProgress) {
+			return false
+		}
+	}
+	return len(ss) > 0
 }

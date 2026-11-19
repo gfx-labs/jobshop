@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -195,4 +196,117 @@ func TestTicketHolderPlan(t *testing.T) {
 		p := explain(t, db, q, args...)
 		require.Contains(t, p, "tickets_holder", "%+v: %s", f, p)
 	}
+}
+
+// TestTicketMetaOrderPlan checks the two meta Lists a trigger runs on a
+// quiet tick (#1314), for a trigger that filed many tickets: the newest
+// one reads ticket_meta in created_at order with no sort, and the open ones
+// start from the open tickets, not from every ticket the trigger filed.
+func TestTicketMetaOrderPlan(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	path := testPath(t)
+	s, err := sqlite.Open(ctx, path, sqlite.Options{})
+	require.NoError(t, err)
+	g := store.Graph{Close: map[string]string{}}
+	for i := range 1500 {
+		meta := fmt.Sprintf(`{"trigger":{"name":"t%d"}}`, i%3)
+		id := fmt.Sprintf("js-%04d", i)
+		kind := domain.Kind("task")
+		if i%2 == 0 {
+			kind = "batch"
+		}
+		nt := store.NewTicket{ID: id, Project: "js", Kind: kind, Title: "x", Meta: json.RawMessage(meta)}
+		if kind == "batch" {
+			nt.Fields = json.RawMessage(fmt.Sprintf(`{"key":"b%d","state":"open"}`, i))
+		}
+		g.Tickets = append(g.Tickets, nt)
+		if i%300 != 1 {
+			// Most of a trigger's tickets are closed, as on an instance.
+			g.Close[id] = "done"
+		}
+	}
+	_, err = s.Apply(ctx, "test", g)
+	require.NoError(t, err)
+	require.NoError(t, s.Close())
+	s, err = sqlite.Open(ctx, path, sqlite.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=query_only(1)")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	newest := store.Filter{MetaPack: "trigger", MetaKey: "name", MetaValue: "t1", Order: store.OrderNewest, Limit: 1}
+	q, args, err := sqlite.TicketListSQL(s, newest)
+	require.NoError(t, err)
+	p := explain(t, db, q, args...)
+	require.Contains(t, p, "ticket_meta_newest", p)
+	require.NotContains(t, p, "TEMP B-TREE", p)
+	require.NotContains(t, p, "SCAN t ", p)
+
+	open := store.Filter{
+		MetaPack: "trigger", MetaKey: "name", MetaValue: "t1",
+		Kinds: []domain.Kind{"task"}, Statuses: []domain.Status{"open", "in_progress"}, Limit: store.NoLimit,
+	}
+	q, args, err = sqlite.TicketListSQL(s, open)
+	require.NoError(t, err)
+	p = explain(t, db, q, args...)
+	require.Contains(t, p, "tickets_kind", q+" "+fmt.Sprint(args)+" "+p)
+	require.NotContains(t, p, "LIST SUBQUERY", p)
+}
+
+// TestTicketMetaOrder: a meta List ordered by created_at returns the same
+// tickets as one filtered after the fact, with other filters, a limit, the
+// After cursor and a meta change.
+func TestTicketMetaOrder(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	now := time.Date(2026, 11, 19, 0, 0, 0, 0, time.UTC)
+	s, err := sqlite.Open(ctx, testPath(t), sqlite.Options{Now: func() time.Time { now = now.Add(time.Second); return now }})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+	var ids []string
+	for i := range 12 {
+		meta := fmt.Sprintf(`{"trigger":{"name":"t%d"},"x":{"k":"v"}}`, i%2)
+		pool := "a"
+		if i%3 == 0 {
+			pool = "b"
+		}
+		out, err := s.Apply(ctx, "test", store.Graph{Tickets: []store.NewTicket{{Project: "js", Kind: "task", Title: fmt.Sprint(i), Pool: pool, Meta: json.RawMessage(meta)}}})
+		require.NoError(t, err)
+		ids = append(ids, out[0].ID)
+	}
+	titles := func(ts []domain.Ticket) []string {
+		var out []string
+		for _, tk := range ts {
+			out = append(out, tk.Title)
+		}
+		return out
+	}
+	list := func(f store.Filter) []string {
+		f.MetaPack, f.MetaKey = "trigger", "name"
+		ts, err := s.List(ctx, f)
+		require.NoError(t, err)
+		return titles(ts)
+	}
+	require.Equal(t, []string{"10", "8", "6", "4", "2", "0"}, list(store.Filter{MetaValue: "t0", Order: store.OrderNewest}))
+	require.Equal(t, []string{"0", "2", "4", "6", "8", "10"}, list(store.Filter{MetaValue: "t0", Order: store.OrderOldest}))
+	require.Equal(t, []string{"10", "8"}, list(store.Filter{MetaValue: "t0", Order: store.OrderNewest, Limit: 2}))
+	require.Equal(t, []string{"10", "8", "4", "2"}, list(store.Filter{MetaValue: "t0", Pool: "a", Order: store.OrderNewest}))
+	require.Equal(t, []string{"6", "0"}, list(store.Filter{MetaValue: "t0", Pool: "b", Order: store.OrderNewest}))
+	require.Equal(t, []string{"4", "2", "0"}, list(store.Filter{MetaValue: "t0", Order: store.OrderNewest, After: ids[6]}))
+	require.Equal(t, []string{"9"}, list(store.Filter{MetaValue: "t1", Order: store.OrderNewest, Pool: "b", Limit: 1}))
+	require.Equal(t, []string{"11"}, list(store.Filter{MetaValue: "t1", Order: store.OrderNewest, Limit: 1, Meta: []store.MetaMatch{{Pack: "x", Key: "k", Value: "v"}}}))
+
+	// An open set: the same answer through the other plan.
+	require.Equal(t, 6, len(list(store.Filter{MetaValue: "t0", Kinds: []domain.Kind{"task"}, Statuses: []domain.Status{"open", "in_progress"}})))
+	_, err = s.Release(ctx, "test", ids[0], nil, store.Outcome{Close: "done"})
+	require.NoError(t, err)
+	require.Equal(t, 5, len(list(store.Filter{MetaValue: "t0", Kinds: []domain.Kind{"task"}, Statuses: []domain.Status{"open", "in_progress"}})))
+	require.Equal(t, 6, len(list(store.Filter{MetaValue: "t0", Order: store.OrderNewest})))
+
+	// A meta update moves the ticket and keeps its created_at.
+	_, err = s.Update(ctx, "test", ids[10], store.Update{Meta: json.RawMessage(`{"trigger":{"name":"t1"}}`)})
+	require.NoError(t, err)
+	require.Equal(t, []string{"11", "10"}, list(store.Filter{MetaValue: "t1", Order: store.OrderNewest, Limit: 2}))
 }
