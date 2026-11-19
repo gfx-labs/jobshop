@@ -64,6 +64,7 @@ func TestMain(m *testing.M) {
 		sandboxProbe()
 		isolationProbe()
 		homeProbe()
+		recordCwd()
 		fakeAgent()
 		os.Exit(0)
 	}
@@ -752,7 +753,8 @@ func TestPoolKeyedByRepo(t *testing.T) {
 		return repo
 	}
 	repoA, repoB := gitInit("a"), gitInit("b")
-	cfg := fmt.Sprintf("projects:\n  js: {}\nagents:\n  fake:\n    command: %q\n    args: [fake-agent]\npools:\n  dev:\n    project: js\n    agent: fake\n    max_sessions: 2\n    idle_timeout: 1m\n    repo: %q\n    ref: master\n    repos:\n      acme/b: {checkout: %q}\n", os.Args[0], repoA, repoB)
+	cwds := filepath.Join(root.Dir, "cwds")
+	cfg := fmt.Sprintf("projects:\n  js: {}\nagents:\n  fake:\n    command: %q\n    args: [fake-agent, %q]\npools:\n  dev:\n    project: js\n    agent: fake\n    max_sessions: 2\n    idle_timeout: 1m\n    repo: %q\n    ref: master\n    repos:\n      acme/b: {checkout: %q}\n", os.Args[0], cwds, repoA, repoB)
 	require.NoError(t, os.WriteFile(filepath.Join(root.Dir, config.FileName), []byte(cfg), 0o600))
 	stop := start()
 	defer stop()
@@ -789,15 +791,11 @@ func TestPoolKeyedByRepo(t *testing.T) {
 	assert.Empty(t, sessionRepo(sa), "acme/a has no repos entry: a default session")
 	assert.Equal(t, "acme/b", sessionRepo(sb))
 
-	worktrees := func(repo string) string {
-		out, err := exec.Command("git", "-C", repo, "worktree", "list").CombinedOutput()
-		require.NoError(t, err, string(out))
-		return string(out)
-	}
-	workB := filepath.Join(root.SessionDir(sb), "work")
-	assert.Contains(t, worktrees(repoB), workB, "the acme/b session works in a worktree of its checkout")
-	assert.NotContains(t, worktrees(repoA), workB)
-	assert.Contains(t, worktrees(repoA), filepath.Join(root.SessionDir(sa), "work"))
+	// Each agent recorded where it worked: the worktrees themselves go once
+	// the pool scales an idle session down.
+	repos := sessionRepos(t, cwds)
+	assert.Equal(t, gitDirOf(t, repoB), repos[filepath.Join(root.SessionDir(sb), "work")], "the acme/b session works in a worktree of its checkout")
+	assert.Equal(t, gitDirOf(t, repoA), repos[filepath.Join(root.SessionDir(sa), "work")])
 }
 
 // TestSessionNewRepo (JOB-232): session new --repo starts a session keyed
@@ -807,6 +805,7 @@ func TestPoolKeyedByRepo(t *testing.T) {
 func TestSessionNewRepo(t *testing.T) {
 	root, start := poolRootReal(t, "1m")
 	repoA, repoB := filepath.Join(root.Dir, "a"), filepath.Join(root.Dir, "b")
+	cwds := filepath.Join(root.Dir, "cwds")
 	for _, repo := range []string{repoA, repoB} {
 		for _, args := range [][]string{
 			{"init", "-q", "-b", "master", repo},
@@ -816,7 +815,7 @@ func TestSessionNewRepo(t *testing.T) {
 			require.NoError(t, err, string(out))
 		}
 	}
-	cfg := fmt.Sprintf("projects:\n  js: {}\nagents:\n  fake:\n    command: %q\n    args: [fake-agent]\npools:\n  dev:\n    project: js\n    agent: fake\n    max_sessions: 2\n    idle_timeout: 1m\n    repo: %q\n    ref: master\n    repos:\n      acme/b: {checkout: %q}\n  plain:\n    project: js\n    agent: fake\n    max_sessions: 1\n    idle_timeout: 1m\n    repo: %q\n    ref: master\n", os.Args[0], repoA, repoB, repoA)
+	cfg := fmt.Sprintf("projects:\n  js: {}\nagents:\n  fake:\n    command: %q\n    args: [fake-agent, %q]\npools:\n  dev:\n    project: js\n    agent: fake\n    max_sessions: 2\n    idle_timeout: 1m\n    repo: %q\n    ref: master\n    repos:\n      acme/b: {checkout: %q}\n  plain:\n    project: js\n    agent: fake\n    max_sessions: 1\n    idle_timeout: 1m\n    repo: %q\n    ref: master\n", os.Args[0], cwds, repoA, repoB, repoA)
 	require.NoError(t, os.WriteFile(filepath.Join(root.Dir, config.FileName), []byte(cfg), 0o600))
 	stop := start()
 	defer stop()
@@ -851,9 +850,9 @@ func TestSessionNewRepo(t *testing.T) {
 		}
 	}
 	assert.Equal(t, sess.Ticket.ID, claimer, "the session started with --repo took the acme/b ticket")
-	out, err := exec.Command("git", "-C", repoB, "worktree", "list").CombinedOutput()
-	require.NoError(t, err, string(out))
-	assert.Contains(t, string(out), filepath.Join(root.SessionDir(sess.Ticket.ID), "work"))
+	// The worktree is gone once the pool scales the idle session down, so
+	// read where the agent worked from what it recorded.
+	assert.Equal(t, gitDirOf(t, repoB), sessionRepos(t, cwds)[filepath.Join(root.SessionDir(sess.Ticket.ID), "work")])
 }
 
 // TestWorktreeDeleted removes a live session's git worktree, as happened on
@@ -960,6 +959,47 @@ func TestPoolSession(t *testing.T) {
 	assert.False(t, hostRunning(root.SessionDir(sess.ID)), "host stopped with the session")
 	_, ok := host.ReadExit(root.SessionDir(sess.ID))
 	assert.True(t, ok, "host wrote exit.json")
+}
+
+// recordCwd appends "<cwd>\t<git common dir>" to the file named by the
+// agent's second argument, when there is one. A test reads it after the
+// session ended: its worktree is gone once the pool scales the session
+// down, so `git worktree list` cannot show where it worked.
+func recordCwd() {
+	if len(os.Args) < 3 {
+		return
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	common, _ := exec.Command("git", "rev-parse", "--path-format=absolute", "--git-common-dir").Output()
+	if f, err := os.OpenFile(os.Args[2], os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
+		_, _ = fmt.Fprintf(f, "%s\t%s\n", cwd, strings.TrimSpace(string(common)))
+		_ = f.Close()
+	}
+}
+
+// sessionRepos reads the file recordCwd wrote: the git common dir of each
+// work dir an agent ran in.
+func sessionRepos(t *testing.T, file string) map[string]string {
+	t.Helper()
+	b, err := os.ReadFile(file)
+	require.NoError(t, err)
+	out := map[string]string{}
+	for line := range strings.SplitSeq(strings.TrimSpace(string(b)), "\n") {
+		cwd, common, _ := strings.Cut(line, "\t")
+		out[cwd] = common
+	}
+	return out
+}
+
+// gitDirOf is the .git dir of the repo at path, symlinks resolved.
+func gitDirOf(t *testing.T, repo string) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(repo)
+	require.NoError(t, err)
+	return filepath.Join(dir, ".git")
 }
 
 // fakeAgent speaks ACP on stdio and closes each prompted ticket.
