@@ -140,6 +140,15 @@ func (m *Metrics) SinceHousekeeping(ctx context.Context, step string, start time
 	m.Housekeeping.Record(ctx, time.Since(start).Seconds(), metric.WithAttributes(attribute.String("step", step)))
 }
 
+// RecordTrigger records how long one configured trigger took in a pass
+// (#1292).
+func (m *Metrics) RecordTrigger(ctx context.Context, name string, took time.Duration) {
+	if m == nil {
+		return
+	}
+	m.TriggerDuration.Record(ctx, took.Seconds(), metric.WithAttributes(attribute.String("trigger", name)))
+}
+
 // SinceLock records the time spent waiting for lock, taken for who.
 func (m *Metrics) SinceLock(ctx context.Context, lock, who string, start time.Time) {
 	if m == nil {

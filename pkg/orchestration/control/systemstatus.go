@@ -29,10 +29,11 @@ func (c *Controller) finishTick(start time.Time) {
 	}
 }
 
-func (c *Controller) systemStatus(_ context.Context, sc scope, _ struct{}) (any, error) {
-	if err := c.requireGrant(sc, "pool-list", "system status"); err != nil {
-		return nil, err
-	}
+// systemStatus answers any caller, admin socket or session of any project
+// (#1292). rpc.SystemStatus holds only timings, counts and the names of
+// the fixed tick steps: no paths, tickets or tokens. A field that carries
+// anything else must be left out for a caller without the pool-list grant.
+func (c *Controller) systemStatus(_ context.Context, _ scope, _ struct{}) (any, error) {
 	c.statusMu.Lock()
 	defer c.statusMu.Unlock()
 	out := c.status
