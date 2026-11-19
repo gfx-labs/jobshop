@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.43](https://github.com/gfx-labs/jobshop/compare/v0.10.42...v0.10.43) (2026-11-19)
+
+
+### Bug fixes
+
+* **control:** serialize commentOnce so held-escalation comment is not doubled ([#1307](https://github.com/gfx-labs/jobshop/issues/1307)) ([#1307](https://github.com/gfx-labs/jobshop/issues/1307)) ([6256e54](https://github.com/gfx-labs/jobshop/commit/6256e54fbc561db51d393a75c06ada3d9d57b40e))
+
 ## [0.10.42](https://github.com/gfx-labs/jobshop/compare/v0.10.41...v0.10.42) (2026-11-19)
 
 
