@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.47](https://github.com/gfx-labs/jobshop/compare/v0.10.46...v0.10.47) (2026-11-20)
+
+
+### Bug fixes
+
+* **control:** log routine session worktree removal at Info ([#1321](https://github.com/gfx-labs/jobshop/issues/1321)) ([#1322](https://github.com/gfx-labs/jobshop/issues/1322)) ([be8511c](https://github.com/gfx-labs/jobshop/commit/be8511c3509f2c79c9b2f224eba7bff2bff141a2))
+
 ## [0.10.46](https://github.com/gfx-labs/jobshop/compare/v0.10.45...v0.10.46) (2026-11-19)
 
 
