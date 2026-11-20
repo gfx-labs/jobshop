@@ -1898,8 +1898,9 @@ func worktreeAddPermanent(out string) bool {
 }
 
 // removeWorktree deletes a session's worktree. caller names the code path
-// for the WARN (#154). It refuses while the ticket is open or the host is
-// alive: a live session's worktree must never go.
+// in the log (#154). The routine removal of a closed session logs at Info;
+// the refusal and a failed remove stay Warn. It refuses while the ticket is
+// open or the host is alive: a live session's worktree must never go.
 func (c *Controller) removeWorktree(cfg *config.Config, t domain.Ticket, caller string) {
 	repo, _ := c.sessionCheckout(cfg, t)
 	if repo == "" {
@@ -1914,7 +1915,7 @@ func (c *Controller) removeWorktree(cfg *config.Config, t domain.Ticket, caller 
 			"status", t.Status, "cwd", cwd)
 		return
 	}
-	c.log.Warn("removing session worktree", "session", t.ID, "caller", caller, "cwd", cwd)
+	c.log.Info("removing session worktree", "session", t.ID, "caller", caller, "cwd", cwd)
 	c.gitMu.Lock()
 	defer c.gitMu.Unlock()
 	// The worktree is locked so outside `git worktree remove` (gh pr merge
