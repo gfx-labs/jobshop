@@ -28,7 +28,7 @@ const housekeepEvery = time.Minute
 
 // housekeepingSteps are the step names, in run order.
 var housekeepingSteps = []string{
-	"scan_sessions", "prune_inbox", "prune_write_keys", "prune_sync", "prune_artifacts", "expire_learnings", "compress_journals", "maintain_store",
+	"scan_sessions", "prune_sessions", "prune_inbox", "prune_write_keys", "prune_sync", "prune_artifacts", "expire_learnings", "compress_journals", "maintain_store",
 }
 
 // pumpHousekeeping runs housekeeping once at start and then every
@@ -60,6 +60,7 @@ func (c *Controller) housekeeping() {
 	defer span.End()
 	cfg := c.config()
 	c.hkStep(ctx, cfg, "scan_sessions", func(ctx context.Context, _ *config.Config) { c.scanSessions(ctx) })
+	c.hkStep(ctx, cfg, "prune_sessions", c.pruneSessions)
 	c.hkStep(ctx, cfg, "prune_inbox", c.pruneInbox)
 	c.hkStep(ctx, cfg, "prune_write_keys", c.pruneWriteKeys)
 	c.hkStep(ctx, cfg, "prune_sync", c.pruneSync)

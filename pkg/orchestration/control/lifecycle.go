@@ -114,6 +114,7 @@ func (c *Controller) forgetDead(id string) {
 	c.deadMu.Lock()
 	defer c.deadMu.Unlock()
 	delete(c.sessDead, id)
+	delete(c.sessPruned, id)
 }
 
 // stopAll is the full shutdown: end every session, then stop.

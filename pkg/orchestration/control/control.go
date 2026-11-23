@@ -239,6 +239,8 @@ type Controller struct {
 	// host dead: the orphan walk skips them (#1311).
 	deadMu   sync.Mutex
 	sessDead map[string]bool
+	// sessPruned is the subset of sessDead already pruned (#1324).
+	sessPruned map[string]bool
 	// hostAlive, if set, replaces session.HostAlive in the orphan walk.
 	hostAlive func(dir string) bool
 	// scanHook, if set, runs at the end of each scan_sessions substep

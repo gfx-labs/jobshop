@@ -71,6 +71,8 @@ type Config struct {
 	Artifacts Artifacts `yaml:"artifacts"`
 	// Journal configures journal shipping and search (#530).
 	Journal Journal `yaml:"journal"`
+	// Sessions configures what stays of closed session directories (#1324).
+	Sessions Sessions `yaml:"sessions"`
 	// Store selects the ticket store backend (#493).
 	Store Store `yaml:"store"`
 	// Defaults hold settings agents and pools inherit (#262).
@@ -1052,6 +1054,30 @@ func (j JournalCompress) AfterDuration() time.Duration {
 	return d
 }
 
+// Sessions configures closed session directories (#1324). Host-only.
+type Sessions struct {
+	// PruneAfter is how long after a session closed its directory is
+	// pruned to the journal, spec and exit files (Go duration or Nd). A
+	// dir with a live host or an open ticket is never touched. Empty:
+	// off, nothing is removed.
+	PruneAfter string `yaml:"prune_after"`
+}
+
+// PruneAfterDuration is PruneAfter parsed; 0 means off.
+func (s Sessions) PruneAfterDuration() time.Duration {
+	d, _ := parseDays(s.PruneAfter)
+	return d
+}
+
+func (s Sessions) check() error {
+	if r := s.PruneAfter; r != "" {
+		if d, err := parseDays(r); err != nil || d <= 0 {
+			return fmt.Errorf("sessions.prune_after %q must be a positive duration (e.g. 30d)", r)
+		}
+	}
+	return nil
+}
+
 // VictoriaLogs is one VictoriaLogs instance.
 type VictoriaLogs struct {
 	// URL is the base URL, e.g. http://127.0.0.1:9428.
@@ -1808,6 +1834,9 @@ func parse(b []byte, sources map[string][]string) (*Config, error) {
 		return nil, fmt.Errorf("%s: artifacts.max_bytes must be >= 0", FileName)
 	}
 	if err := c.Journal.check(); err != nil {
+		return nil, fmt.Errorf("%s: %w", FileName, err)
+	}
+	if err := c.Sessions.check(); err != nil {
 		return nil, fmt.Errorf("%s: %w", FileName, err)
 	}
 	if c.Limits.MaxSessions < 0 {

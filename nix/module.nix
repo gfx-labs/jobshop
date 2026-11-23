@@ -157,8 +157,13 @@ let
   cgSystemd = cfg.isolation.enable && cfg.isolation.cgroupDriver == "systemd";
   # sessionsCpu (CPUs, "2.5") as a CPUQuota percentage.
   sessionsQuota = "${toString (builtins.floor (builtins.fromJSON sessionsCpu * 100 + 0.5))}%";
+  # Session directory retention (#1324): only set when pruneAfter is.
+  pruneAttrs = lib.optionalAttrs (cfg.sessions.pruneAfter != "") {
+    sessions.prune_after = cfg.sessions.pruneAfter;
+  };
   moduleAttrs = lib.recursiveUpdate compressAttrs (
-    telemetryAttrs
+    pruneAttrs
+    // telemetryAttrs
     // storeAttrs
     // cgroupAttrs
     // lib.optionalAttrs (vlUrl != "") {
@@ -925,6 +930,13 @@ in
         example = "selfdev";
         description = "Instance name on traces, logs and metrics (telemetry.instance: service.instance.id and jobshop.instance, JOB-106). Null: jobshop's default, the dataDir base name, or hostname:dataDir when that is jobshop.";
       };
+    };
+
+    sessions.pruneAfter = lib.mkOption {
+      type = lib.types.str;
+      default = "";
+      example = "30d";
+      description = "Remove everything but the journal, index, spec and exit files from a closed session's directory this long after it closed, when its host is dead (sessions.prune_after, #1324). Empty: off.";
     };
 
     journal.compress = {
