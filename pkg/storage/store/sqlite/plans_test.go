@@ -310,3 +310,34 @@ func TestTicketMetaOrder(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"11", "10"}, list(store.Filter{MetaValue: "t1", Order: store.OrderNewest, Limit: 2}))
 }
+
+// TestTicketInProgressPlan checks the supervisor's read of every in-progress
+// ticket uses tickets_lease, a partial index on that status. A bound status
+// does not prove the index applies, so List scanned every ticket each tick,
+// and the first tick after a start paid for cold pages too (#1325).
+func TestTicketInProgressPlan(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	path := testPath(t)
+	s, err := sqlite.Open(ctx, path, sqlite.Options{})
+	require.NoError(t, err)
+	var g store.Graph
+	for range 1500 {
+		g.Tickets = append(g.Tickets, store.NewTicket{Project: "js", Kind: "task", Title: "x"})
+	}
+	_, err = s.Apply(ctx, "test", g)
+	require.NoError(t, err)
+	require.NoError(t, s.Close())
+	s, err = sqlite.Open(ctx, path, sqlite.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=query_only(1)")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+
+	f := store.Filter{Status: domain.StatusInProgress, Limit: store.NoLimit}
+	q, args, err := sqlite.TicketListSQL(s, f)
+	require.NoError(t, err)
+	p := explain(t, db, q, args...)
+	require.Contains(t, p, "tickets_lease", p)
+}

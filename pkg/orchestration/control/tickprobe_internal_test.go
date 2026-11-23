@@ -206,3 +206,25 @@ func TestSlowTickNamesTrigger(t *testing.T) {
 	assert.Contains(t, next, "slow tick")
 	assert.NotContains(t, next, "slowest_trigger")
 }
+
+// TestFirstTicksLogged (#1325): the first two ticks after a start log their
+// per-step seconds even when they are quick, and the third does not.
+func TestFirstTicksLogged(t *testing.T) {
+	t.Parallel()
+	var log lockedBuf
+	c, _, dir := offTickController(t, quietYAML, &log)
+	c.tracer = noop.NewTracerProvider().Tracer("test")
+	c.probe = newTickProbe(time.Hour, filepath.Join(dir, "db"), nil)
+	c.tickSteps = map[string]float64{}
+	for range 3 {
+		c.tick()
+	}
+	out := log.String()
+	assert.NotContains(t, out, "slow tick")
+	assert.Equal(t, 2, strings.Count(out, "first ticks"), out)
+	assert.Contains(t, out, "tick=1 ")
+	assert.Contains(t, out, "tick=2 ")
+	assert.NotContains(t, out, "tick=3 ")
+	assert.Contains(t, out, "step_supervise=")
+	assert.Contains(t, out, "step_run_triggers=")
+}
