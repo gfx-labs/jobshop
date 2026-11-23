@@ -23,6 +23,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/klauspost/compress/gzhttp"
@@ -754,9 +755,15 @@ func fillTrace(n *rpc.TraceNode, ss map[string]rpc.HolderInfo) {
 }
 
 // sse writes server-sent events; the browser's EventSource reconnects.
+// sse writes one event stream. The rpc client runs event callbacks on its
+// reader goroutine, which can fire after the handler returned; net/http has
+// then released the response's buffered writer and a Flush panics (#1334).
+// A handler defers close, and every write holds mu and checks done.
 type sse struct {
-	w http.ResponseWriter
-	f http.Flusher
+	mu   sync.Mutex
+	done bool
+	w    http.ResponseWriter
+	f    http.Flusher
 }
 
 func newSSE(w http.ResponseWriter) (*sse, bool) {
@@ -774,9 +781,36 @@ func newSSE(w http.ResponseWriter) (*sse, bool) {
 	return &sse{w: w, f: f}, true
 }
 
+// close ends the stream: later writes are dropped. Call it, deferred, before
+// the handler returns.
+func (e *sse) close() {
+	e.mu.Lock()
+	e.done = true
+	e.mu.Unlock()
+}
+
+// keepalive writes an SSE comment and reports whether the write succeeded.
+func (e *sse) keepalive() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.done {
+		return nil
+	}
+	if _, err := io.WriteString(e.w, ": keepalive\n\n"); err != nil {
+		return err
+	}
+	e.f.Flush()
+	return nil
+}
+
 func (e *sse) send(event string, id int64, v any) {
 	b, err := json.Marshal(v)
 	if err != nil {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.done {
 		return
 	}
 	if id > 0 {
@@ -803,6 +837,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	defer e.close()
 	res, err := s.ctl.Events(r.Context(), rpc.EventsSubscribeParams{SinceSeq: lastID(r)}, func(ev rpc.Event) {
 		e.send(ev.Kind, ev.Seq, ev)
 	})
@@ -822,6 +857,7 @@ func (s *Server) sessionStream(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	defer e.close()
 	since := lastID(r)
 	tail, _ := strconv.ParseInt(r.URL.Query().Get("tail"), 10, 64)
 	if tail <= 0 {
