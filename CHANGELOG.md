@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.49](https://github.com/gfx-labs/jobshop/compare/v0.10.48...v0.10.49) (2026-11-23)
+
+
+### Features
+
+* **control:** opt-in pruning of closed session directories ([#1324](https://github.com/gfx-labs/jobshop/issues/1324)) ([#1328](https://github.com/gfx-labs/jobshop/issues/1328)) ([537ab2f](https://github.com/gfx-labs/jobshop/commit/537ab2fad9e45548c80fee2436ccd2e5db2b6811))
+
 ## [0.10.48](https://github.com/gfx-labs/jobshop/compare/v0.10.47...v0.10.48) (2026-11-23)
 
 
