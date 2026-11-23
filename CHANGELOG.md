@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.48](https://github.com/gfx-labs/jobshop/compare/v0.10.47...v0.10.48) (2026-11-23)
+
+
+### Performance
+
+* **store:** read in-progress tickets through tickets_lease, log first ticks ([#1325](https://github.com/gfx-labs/jobshop/issues/1325)) ([#1329](https://github.com/gfx-labs/jobshop/issues/1329)) ([7d643bf](https://github.com/gfx-labs/jobshop/commit/7d643bfca2c839bd6dfea1a47c083fdd09af48fb))
+
 ## [0.10.47](https://github.com/gfx-labs/jobshop/compare/v0.10.46...v0.10.47) (2026-11-20)
 
 
