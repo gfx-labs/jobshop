@@ -18,3 +18,6 @@
 - Not done here: Postgres on a pgx pool instead of `database/sql`, and
   dropping the rewriter by giving each backend its own SQL. Those are
   follow-ups, filed separately.
+  2026-11-05: the rewriter is dropped, one SQL dialect (#694, #697). The
+  pgx pool was closed not planned (#696): no Postgres deployment profile
+  shows the `database/sql` shim cost; reopen it with one.

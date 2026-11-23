@@ -27,3 +27,5 @@ takes them out of the curator's view.
 - `packs/selfdev/prompts/curate.md` says expired learnings are not gathered.
 - Not done: expiring automatically. The backlog grows again unless the command
   is run from time to time.
+  2026-11-16: built in JOB-220 (#1267), housekeeping expires old open
+  learnings.

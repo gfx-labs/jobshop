@@ -32,3 +32,4 @@
 - Not built yet (#316): the shared read-only mise install dir filled by a module
   unit (`MISE_SHARED_INSTALL_DIRS`); hosts set it through
   `environment` and `sandbox.sharedTools` for now.
+  2026-11-04: built in #316 (#380), see `316-sandbox-mise-shared.md`.
