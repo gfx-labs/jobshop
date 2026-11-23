@@ -42,11 +42,15 @@ remove cost one ticket read each.
 Not kept: a session reopened after pruning has no worktree or host files.
 Use an age long enough that nobody reopens (30d or more).
 
-Post-restart check left open by #1311 (`slow scan_sessions` in
-`jobshop report incidents --since 24h`): not read in this session.
-`report incidents` needs the admin socket or the `report-incidents` pool
-grant, and the dev pool has neither. Run it on an admin session; the
-controller there started 2026-11-20 (0.10.47). Fill the number in here.
+Post-restart check left open by #1311, read 2026-11-23 (#1332) with
+`jobshop report incidents --since 24h` on the planner session, first scan
+after the 0.10.48 restart, retention off on this host: one `slow
+scan_sessions` line at 23:00:34Z. `seconds` 1.987, `walk_seconds` 1.527,
+`list_closed_seconds` 0.386, `list_open_seconds` 0.017,
+`backfill_seconds` 0.056, `dirs` 4792, `orphans` 0, slowest dir 0.011s
+(js-003283ea78002). So the first scan after a start still costs about 2s
+at ~4800 dirs. Retention does not change that while it is off and, as
+above, mostly does not change the per-dir ticket read when it is on.
 
 Tests: `TestPruneSessions`, `TestPruneSessionsOffByDefault`,
 `TestPruneSessionsReopened` (fake clock, no sleeps),

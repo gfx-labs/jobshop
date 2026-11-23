@@ -30,3 +30,4 @@ Check after deploy: wait for the first scan after the restart, then
 `jobshop report incidents --since 24h` should show no new
 `slow scan_sessions` at ~4000 dirs. The first scan after the restart can
 still be slow. Not checked yet (needs a deploy window).
+Checked 2026-11-23, see `docs/notes/1324-session-retention.md`.
