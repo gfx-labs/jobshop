@@ -78,6 +78,8 @@ func TestParseErrors(t *testing.T) {
 		{"bad timeout", base + "pools:\n  p:\n    agent: a\n    dir: /w\n    idle_timeout: soon\n", "idle_timeout"},
 		{"unknown telemetry key", base + "telemetry:\n  metrics: x\n", "metrics"},
 		{"bad victorialogs url", base + "journal:\n  victorialogs: {url: \"127.0.0.1:9428\"}\n", "journal.victorialogs.url"},
+		{"bad sessions prune_after", base + "sessions:\n  prune_after: soon\n", "sessions.prune_after"},
+		{"zero sessions prune_after", base + "sessions:\n  prune_after: 0s\n", "sessions.prune_after"},
 		{"bad journal lag_max", base + "journal:\n  lag_max: soon\n", "journal.lag_max"},
 		{"bad inbox retention", base + "ingest:\n  retention: 2w\n", "ingest.retention"},
 	}
@@ -105,6 +107,16 @@ func TestParseJournal(t *testing.T) {
 	require.NotNil(t, c.Journal.VictoriaLogs)
 	assert.Equal(t, "Bearer t", c.Journal.VictoriaLogs.HeaderValues(func(string) string { return "t" })["Authorization"])
 	assert.Equal(t, DefaultJournalLagMax, c.Journal.LagMaxDuration())
+}
+
+// TestParseSessionsPrune (#1324): empty is off; Nd and durations parse.
+func TestParseSessionsPrune(t *testing.T) {
+	c, err := Parse([]byte("projects:\n  js: {}\n"))
+	require.NoError(t, err)
+	assert.Zero(t, c.Sessions.PruneAfterDuration())
+	c, err = Parse([]byte("projects:\n  js: {}\nsessions:\n  prune_after: 30d\n"))
+	require.NoError(t, err)
+	assert.Equal(t, 30*24*time.Hour, c.Sessions.PruneAfterDuration())
 }
 
 // TestSessionOptions (#304): the pool overrides the agent per option id,

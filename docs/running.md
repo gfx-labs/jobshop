@@ -202,3 +202,11 @@ journal:
     after: 24h   # empty: off
     level: 3     # zstd 1-22
 ```
+
+## Session directory retention
+
+`sessions.prune_after` (e.g. `30d`; empty is off, the default) removes
+the host files, sockets, scratch and worktree of a closed session whose
+host is dead, that long after it closed. Its journal, index, `spec.json`
+and `exit.json` stay, so Desk, recall and `session attach` still read it.
+See `docs/notes/1324-session-retention.md` (#1324).
