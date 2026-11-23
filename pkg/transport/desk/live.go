@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"time"
 
@@ -18,6 +17,7 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	defer stream.close()
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 	keepalive := time.NewTicker(15 * time.Second)
@@ -106,10 +106,9 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 		case <-ctx.Done():
 			return
 		case <-keepalive.C:
-			if _, err := io.WriteString(w, ": keepalive\n\n"); err != nil {
+			if stream.keepalive() != nil {
 				return
 			}
-			stream.f.Flush()
 		case err := <-done:
 			if err != nil && ctx.Err() == nil {
 				stream.send("error", 0, map[string]string{"error": err.Error()})
