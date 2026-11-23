@@ -258,6 +258,8 @@ type Controller struct {
 	// (#1288), under statusMu.
 	tickTrigger triggers.Slowest
 	tickSamples []float64
+	// ticksDone counts finished ticks since the start, under statusMu.
+	ticksDone int
 	// localMemory serializes local memory writes and restores (#592), so
 	// a write's before text is the file it replaced.
 	localMemory knowledge.LocalMemory

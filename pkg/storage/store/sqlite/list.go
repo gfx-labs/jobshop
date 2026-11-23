@@ -140,6 +140,12 @@ func listQuery(f store.Filter, now int64) (*bqb.Query, error) {
 		// The same set, written as the partial indexes on open work
 		// (tickets_run_key) are, so SQLite can use them.
 		w.And("t.status <> 'closed'")
+	case len(ss) == 1 && ss[0] == string(domain.StatusInProgress):
+		// tickets_lease is a partial index on in-progress tickets. A
+		// bound status does not prove that, so the supervisor's read of
+		// every in-progress ticket scanned the whole table each tick: 16ms
+		// warm, over a second on the first tick after a start (#1325).
+		w.And("t.status = 'in_progress'")
 	case len(ss) > 0:
 		w.And("t.status IN (?)", ss)
 	}
