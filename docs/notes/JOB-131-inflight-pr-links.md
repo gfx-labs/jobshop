@@ -25,6 +25,7 @@ opened one.
 Not done: a separate "unavailable" state. The run carries no signal that
 distinguishes "no PR yet" from "association data missing", so both show a
 dash.
+2026-11-19: built in #1294 (#1296), see `1294-pr-link-unavailable.md`.
 
 Checks: `TestRunShowStepPRLinks`; `ui/e2e/run-links.spec.js` (needs
 `DESK_ISSUE_WORKFLOW`, see `docs/verify/inflight-pr-links.md`).

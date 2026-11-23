@@ -11,5 +11,11 @@ seq, and `session.list` decoded every journal line of every session.
   journal (64 KiB block, doubled until a complete line fits) instead of
   `acphost.JournalTail`, which scans the whole file. It should move into
   acphost later.
+  2026-11-05: done in #721. `pkg/control/journaltail.go` is gone and
+  `acphost.JournalTail` reads backward (`tailBackward` in acphost's
+  `journalstore.go`).
 - Not done: batching `sessionInfo` store queries. Measure `session list
   --all` after deploy first.
+  2026-11-05: partly, held tickets load once in `session.list` (#741);
+  closed sessions list from saved state (#747, `JOB-32-session-state.md`).
+  `sessionInfo` itself is not batched.

@@ -71,5 +71,8 @@ and no rendering of it remains. No other pack had such vars.
   `isolation` and its `isolation.profiles` in `settings`. Pools that get
   their isolation from a label rule or a pack are quarantined at the
   first spawn if the range does not fit, as before.
+  2026-11-17: the quarantine is at start and reload, not first spawn, and
+  covers label-rule, profile and pack pools: JOB-226 (#1276),
+  `JOB-226-isolation-load-check.md`. The module assertion is unchanged.
 - Comparing `jobshop session sandbox` on gasserver before and after is a
   runbook check: `docs/verify/sandbox-profiles.md`.
