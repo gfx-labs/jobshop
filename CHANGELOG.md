@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.50](https://github.com/gfx-labs/jobshop/compare/v0.10.49...v0.10.50) (2026-11-23)
+
+
+### Bug fixes
+
+* **desk:** guard SSE writes after the handler returned ([#1334](https://github.com/gfx-labs/jobshop/issues/1334)) ([#1335](https://github.com/gfx-labs/jobshop/issues/1335)) ([d22cf80](https://github.com/gfx-labs/jobshop/commit/d22cf8022d35cfafff02ba06325b1f8fe49030bc))
+
 ## [0.10.49](https://github.com/gfx-labs/jobshop/compare/v0.10.48...v0.10.49) (2026-11-23)
 
 
