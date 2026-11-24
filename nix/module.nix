@@ -307,21 +307,47 @@ let
     );
   # Pools in settings with isolation.user.per_session (#540); each one's
   # [map_uid, map_uid+range) and gids must sit inside the jobshop user's
-  # subuid/subgid range, else the pool is quarantined at its first spawn.
-  # The user comes from the pool's own isolation or the last of its
-  # isolation.profiles that sets one (JOB-83). Pools that get theirs from a
-  # label rule or a pack are not checked here: the controller quarantines
-  # them at start and on reload instead (preflight, #728, JOB-226).
+  # subuid/subgid range, else the pool is quarantined at start or reload.
+  # The user is merged as the controller does (IsolationFor): defaults,
+  # each defaults.isolation_by_label rule whose labels the pool carries
+  # (#1346), the agent's isolation, then the pool's; within a level its
+  # profiles come first, then its own user (JOB-83). The last user wins.
+  # Pools defined in a pack file (pack.yaml, pack.cue) are not Nix values,
+  # so they are not checked here: the controller's preflight (#728,
+  # JOB-226) catches them at start and on reload.
+  poolHasLabels =
+    pool: want:
+    let
+      have = pool.labels or [ ];
+    in
+    lib.all (w: lib.elem w have || lib.elem (lib.replaceStrings [ "=" ] [ ":" ] w) have) want;
+  levelUsers =
+    iso:
+    let
+      profs = cfg.settings.isolation_profiles or { };
+    in
+    lib.filter (u: u != null) (
+      map (n: (profs.${n} or { }).user or null) (iso.profiles or [ ]) ++ [ (iso.user or null) ]
+    );
   isoUser =
     p:
     let
-      iso = cfg.settings.pools.${p}.isolation or { };
-      profs = cfg.settings.isolation_profiles or { };
-      fromProfiles = lib.filter (u: u != null) (
-        map (n: (profs.${n} or { }).user or null) (iso.profiles or [ ])
-      );
+      pool = cfg.settings.pools.${p};
+      defaults = cfg.settings.defaults or { };
+      agent = cfg.settings.agents.${pool.agent or ""} or { };
+      rules = lib.filter (r: poolHasLabels pool (r.labels or [ ])) (defaults.isolation_by_label or [ ]);
+      levels =
+        lib.catAttrs "isolation" [
+          defaults
+        ]
+        ++ rules
+        ++ lib.catAttrs "isolation" [
+          agent
+          pool
+        ];
+      users = lib.concatMap levelUsers levels;
     in
-    iso.user or (if fromProfiles == [ ] then null else lib.last fromProfiles);
+    if users == [ ] then null else lib.last users;
   isoPools = lib.filter (p: (isoUser p) != null && (isoUser p) ? per_session) (
     lib.attrNames (cfg.settings.pools or { })
   );

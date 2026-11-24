@@ -74,5 +74,7 @@ and no rendering of it remains. No other pack had such vars.
   2026-11-17: the quarantine is at start and reload, not first spawn, and
   covers label-rule, profile and pack pools: JOB-226 (#1276),
   `JOB-226-isolation-load-check.md`. The module assertion is unchanged.
+  2026-11-24: it now covers label-rule, defaults and agent isolation for
+  pools in `settings`, not pack pools: `1337-module-isolation-assertion.md`.
 - Comparing `jobshop session sandbox` on gasserver before and after is a
   runbook check: `docs/verify/sandbox-profiles.md`.

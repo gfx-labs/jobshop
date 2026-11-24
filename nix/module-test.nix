@@ -637,6 +637,108 @@ let
       lib.any (lib.hasInfix "pool dev per_session") (failed (eval (iso 101)))
       && !lib.any (lib.hasInfix "per_session") (failed (eval (iso 100)))
     ))
+    # #1346: a user from a label rule, from a profile the rule names, from
+    # defaults or from the agent is checked for the pools it applies to.
+    (expect "per_session ids set by a label rule are checked too" (
+      let
+        user = range: {
+          uid = 1000;
+          map_uid = 231072;
+          map_gid = 231072;
+          groups = [ "jobshop" ];
+          per_session.range = range;
+        };
+        base = {
+          isolation.enable = true;
+          isolation.subIdCount = 100;
+          settings.pools.dev.labels = [
+            "team:a"
+            "kind:iso"
+          ];
+          settings.pools.other.labels = [ "team:b" ];
+        };
+        rule =
+          range:
+          base
+          // {
+            settings = base.settings // {
+              defaults.isolation_by_label = [
+                {
+                  labels = [ "kind=iso" ];
+                  user = user range;
+                }
+              ];
+            };
+          };
+        viaProfile =
+          range:
+          base
+          // {
+            settings = base.settings // {
+              isolation_profiles.mapped.user = user range;
+              defaults.isolation_by_label = [
+                {
+                  labels = [ "team:a" ];
+                  profiles = [ "mapped" ];
+                }
+              ];
+            };
+          };
+        msgs = c: failed (eval c);
+        over = msgs (rule 101);
+      in
+      lib.any (lib.hasInfix "pool dev per_session") over
+      # The message names the range; a pool without the labels is not named.
+      && lib.any (lib.hasInfix "subIdStart + subIdCount (231072 + 100)") over
+      && !lib.any (lib.hasInfix "pool other") over
+      && !lib.any (lib.hasInfix "per_session") (msgs (rule 100))
+      && lib.any (lib.hasInfix "pool dev per_session") (msgs (viaProfile 101))
+      && !lib.any (lib.hasInfix "per_session") (msgs (viaProfile 100))
+    ))
+    (expect "per_session ids from defaults and agents follow the merge order" (
+      let
+        user = range: {
+          uid = 1000;
+          map_uid = 231072;
+          map_gid = 231072;
+          groups = [ "jobshop" ];
+          per_session.range = range;
+        };
+        base = {
+          isolation.enable = true;
+          isolation.subIdCount = 100;
+          settings.pools.dev.agent = "a";
+        };
+        withSettings = s: base // { settings = base.settings // s; };
+        msgs = c: failed (eval c);
+      in
+      # defaults.isolation applies to every pool in settings.
+      lib.any (lib.hasInfix "pool dev per_session") (
+        msgs (withSettings {
+          defaults.isolation.user = user 101;
+        })
+      )
+      # The agent's user overrides a too-wide default.
+      && !lib.any (lib.hasInfix "per_session") (
+        msgs (withSettings {
+          defaults.isolation.user = user 101;
+          agents.a.isolation.user = user 100;
+        })
+      )
+      # The pool's own user overrides a too-wide label rule.
+      && !lib.any (lib.hasInfix "per_session") (msgs {
+        isolation.enable = true;
+        isolation.subIdCount = 100;
+        settings.pools.dev.labels = [ "kind:iso" ];
+        settings.pools.dev.isolation.user = user 100;
+        settings.defaults.isolation_by_label = [
+          {
+            labels = [ "kind:iso" ];
+            user = user 101;
+          }
+        ];
+      })
+    ))
     # A restart with live sessions must not need a process in the unit
     # cgroup (JOB-21): systemd starts the controller in <unit>/controller.
     (expect "isolation starts the controller in the controller subgroup" (
