@@ -38,6 +38,7 @@ func fake(t *testing.T) (*httptest.Server, *[]call) {
 	var calls []call
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "lin_api_x", r.Header.Get("Authorization"))
+		assert.Equal(t, "3600", r.Header.Get("public-file-urls-expire-in"))
 		b, _ := io.ReadAll(r.Body)
 		var c call
 		require.NoError(t, json.Unmarshal(b, &c))
