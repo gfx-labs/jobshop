@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.51](https://github.com/gfx-labs/jobshop/compare/v0.10.50...v0.10.51) (2026-11-24)
+
+
+### Bug fixes
+
+* **store:** delete FTS documents by rowid and name the collection in writer holds ([#1338](https://github.com/gfx-labs/jobshop/issues/1338)) ([#1339](https://github.com/gfx-labs/jobshop/issues/1339)) ([81d6459](https://github.com/gfx-labs/jobshop/commit/81d64592cbdb6eaf5b25f7140142b81c37eb9f20))
+
 ## [0.10.50](https://github.com/gfx-labs/jobshop/compare/v0.10.49...v0.10.50) (2026-11-23)
 
 
