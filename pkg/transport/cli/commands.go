@@ -1075,7 +1075,7 @@ func (c sessionNewCmd) Run(g *Globals) error {
 
 type reportCmd struct {
 	Incidents  reportIncidentsCmd  `cmd:"" help:"Group controller WARN/ERROR lines, crashed or stuck sessions and failed run steps."`
-	CIFailures reportCIFailuresCmd `cmd:"" name:"ci-failures" help:"Group failing tests from the failed-tests artifact of recent failed CI runs, with flaky/broken counts (runs gh)."`
+	CIFailures reportCIFailuresCmd `cmd:"" name:"ci-failures" help:"Group failing tests from the failed-tests artifact of recent failed CI runs, with flaky/broken counts, and list failed jobs and runs that passed on rerun, on master and PR branches (runs gh)."`
 
 	// Worker reports on the held ticket (#186).
 	Progress reportProgressCmd `cmd:"" help:"Report progress on your ticket."`
@@ -1099,12 +1099,14 @@ type reportCIFailuresCmd struct {
 	Branch   string `default:"master" help:"Branch whose runs to read."`
 	Workflow string `default:"ci" help:"Workflow name or file; empty for all."`
 	Limit    int    `default:"5" help:"How many recent failed runs to read."`
+	// RerunLimit scans recent completed runs of every branch for attempt > 1.
+	RerunLimit int `default:"5" help:"How many recent completed runs, any branch, to scan for reruns."`
 }
 
 // Run reads GitHub directly with gh, not through the controller: it is a
 // read, and the session's gh already carries the repo token (JOB-13).
 func (c reportCIFailuresCmd) Run() error {
-	rep, err := flaky.GH{Repo: c.Repo, Branch: c.Branch, Workflow: c.Workflow}.Report(context.Background(), c.Limit)
+	rep, err := flaky.GH{Repo: c.Repo, Branch: c.Branch, Workflow: c.Workflow, RerunLimit: c.RerunLimit}.Report(context.Background(), c.Limit)
 	if err != nil {
 		return err
 	}

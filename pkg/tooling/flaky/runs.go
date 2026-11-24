@@ -22,6 +22,9 @@ type Run struct {
 	// Tests is nil when the run has no failed-tests artifact (a build
 	// error, or the run failed in another job).
 	Tests []Test `json:"-"`
+	// FailedJobs are the jobs of the latest attempt that failed, whatever
+	// the job (#1344). Empty when gh could not list them (see Warnings).
+	FailedJobs []FailedJob `json:"failed_jobs,omitempty"`
 }
 
 // Group is one test across the runs it failed in, for the planner's
@@ -45,6 +48,14 @@ type Report struct {
 	Runs       []Run   `json:"runs"`
 	NoArtifact []int64 `json:"no_artifact,omitempty"`
 	Tests      []Group `json:"tests"`
+	// Jobs groups the failed jobs of Runs and of the earlier attempts in
+	// Reruns by job and step name (#1344).
+	Jobs []JobGroup `json:"jobs,omitempty"`
+	// Reruns are recent completed runs with attempt > 1 on any branch,
+	// master or a PR, so a failure that passed on rerun is listed.
+	Reruns []RerunRun `json:"reruns,omitempty"`
+	// Warnings are gh reads that failed and were skipped.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // GroupRuns groups the failed tests of runs by test, most failures first.
@@ -92,6 +103,9 @@ type GH struct {
 	Repo     string
 	Branch   string
 	Workflow string
+	// RerunLimit is how many recent completed runs to scan for reruns;
+	// 0 means the limit given to Report.
+	RerunLimit int
 	// Gh runs gh with args and returns stdout. Default: exec gh.
 	Gh func(ctx context.Context, args ...string) ([]byte, error)
 }
@@ -134,9 +148,32 @@ func (g GH) Report(ctx context.Context, limit int) (Report, error) {
 		if r.Tests == nil {
 			rep.NoArtifact = append(rep.NoArtifact, r.ID)
 		}
+		jobs, warns, err := g.failedJobs(ctx, r.ID, 0)
+		if err != nil {
+			if ctx.Err() != nil {
+				return Report{}, ctx.Err()
+			}
+			warns = append(warns, err.Error())
+		}
+		r.FailedJobs = jobs
+		rep.Warnings = append(rep.Warnings, warns...)
 		rep.Runs = append(rep.Runs, r)
 	}
+	rl := g.RerunLimit
+	if rl <= 0 {
+		rl = limit
+	}
+	reruns, warns, err := g.rerunRuns(ctx, rl)
+	if err != nil {
+		if ctx.Err() != nil {
+			return Report{}, ctx.Err()
+		}
+		warns = append(warns, err.Error())
+	}
+	rep.Reruns = reruns
+	rep.Warnings = append(rep.Warnings, warns...)
 	rep.Tests = GroupRuns(rep.Runs)
+	rep.Jobs = GroupJobs(rep.Runs, rep.Reruns)
 	return rep, nil
 }
 

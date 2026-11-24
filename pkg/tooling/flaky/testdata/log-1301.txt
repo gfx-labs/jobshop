@@ -1,0 +1,2 @@
+lint	golangci-lint	2026-11-05T14:59:00.0000000Z level=info msg="linting"
+lint	golangci-lint	2026-11-05T14:59:01.0000000Z Error: issues found

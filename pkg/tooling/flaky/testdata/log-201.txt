@@ -1,0 +1,2 @@
+test	Test	2026-11-05T09:59:02.1234567Z ok  	example.com/b	0.1s
+test	Test	2026-11-05T09:59:03.1234567Z FAIL	example.com/a	0.5s
