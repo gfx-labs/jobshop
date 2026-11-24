@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.10.53](https://github.com/gfx-labs/jobshop/compare/v0.10.52...v0.10.53) (2026-11-24)
+
+
+### Features
+
+* **flaky:** list non-test CI failures and rerun-passed runs in ci-failures ([#1344](https://github.com/gfx-labs/jobshop/issues/1344)) ([#1349](https://github.com/gfx-labs/jobshop/issues/1349)) ([5d4f969](https://github.com/gfx-labs/jobshop/commit/5d4f969afe6baab3d5455857657928cada2cb3fe))
+* **nix:** check per_session range for label-rule, defaults and agent isolation ([#1346](https://github.com/gfx-labs/jobshop/issues/1346)) ([#1347](https://github.com/gfx-labs/jobshop/issues/1347)) ([2476c08](https://github.com/gfx-labs/jobshop/commit/2476c085dd15c48400903f925b169e9853a27763))
+
+
+### Performance
+
+* **control:** read closed session tickets in one batch on the first scan ([#1345](https://github.com/gfx-labs/jobshop/issues/1345)) ([#1348](https://github.com/gfx-labs/jobshop/issues/1348)) ([a5e1634](https://github.com/gfx-labs/jobshop/commit/a5e163487aa4df5d5322a6f768c1c0526c78d153))
+
 ## [0.10.52](https://github.com/gfx-labs/jobshop/compare/v0.10.51...v0.10.52) (2026-11-24)
 
 
