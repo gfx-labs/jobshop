@@ -107,7 +107,19 @@ func (c *Controller) scanSessions(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	orphans := c.orphansWith(ctx, open, func(id string, took time.Duration) {
+	closed := c.newClosedSessions()
+	// Until Ended is filled the closed tickets are needed for the backfill
+	// anyway: read them once before the walk, so the walk does not read one
+	// ticket per directory (#1345).
+	c.sessScanMu.Lock()
+	done := c.endedFilled
+	c.sessScanMu.Unlock()
+	var listErr error
+	if !done {
+		listErr = closed.load(ctx)
+		mark(&tm.ListClosed, "list_closed")
+	}
+	orphans := c.orphansWith(ctx, open, closed, func(id string, took time.Duration) {
 		tm.Dirs++
 		if took > tm.SlowestDir {
 			tm.SlowestDir, tm.SlowestDirID = took, id
@@ -118,10 +130,9 @@ func (c *Controller) scanSessions(ctx context.Context) {
 	c.sessScanMu.Lock()
 	c.sessOrphans = orphans
 	c.sessScanned = true
-	done := c.endedFilled
 	c.sessScanMu.Unlock()
-	if !done {
-		c.backfillEnded(ctx, orphans, &tm, mark)
+	if !done && listErr == nil {
+		c.backfillEnded(ctx, orphans, closed.tickets, &tm, mark)
 	}
 }
 
@@ -151,12 +162,7 @@ func (c *Controller) scanMark() func(d *time.Duration, name string) {
 
 // backfillEnded fills Ended on up to endedBackfillBatch closed sessions
 // per pass, until none is left.
-func (c *Controller) backfillEnded(ctx context.Context, orphans []string, tm *scanTimes, mark func(*time.Duration, string)) {
-	closed, err := c.store.List(ctx, store.Filter{Kind: domain.KindSession, Status: domain.StatusClosed, Limit: math.MaxInt32})
-	mark(&tm.ListClosed, "list_closed")
-	if err != nil {
-		return
-	}
+func (c *Controller) backfillEnded(ctx context.Context, orphans []string, closed []domain.Ticket, tm *scanTimes, mark func(*time.Duration, string)) {
 	defer mark(&tm.Backfill, "backfill")
 	n := 0
 	for _, t := range closed {

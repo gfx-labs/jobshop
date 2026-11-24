@@ -51,6 +51,7 @@ scan_sessions` line at 23:00:34Z. `seconds` 1.987, `walk_seconds` 1.527,
 (js-003283ea78002). So the first scan after a start still costs about 2s
 at ~4800 dirs. Retention does not change that while it is off and, as
 above, mostly does not change the per-dir ticket read when it is on.
+The per-dir read is batched since #1345: `1337-first-scan-batched.md`.
 
 Tests: `TestPruneSessions`, `TestPruneSessionsOffByDefault`,
 `TestPruneSessionsReopened` (fake clock, no sleeps),
