@@ -1,0 +1,4 @@
+{"jobs": [
+  {"databaseId": 1302, "name": "e2e", "conclusion": "failure", "url": "https://example.com/13/job/1302",
+   "steps": [{"name": "Run Desk e2e", "conclusion": "failure"}]}
+]}

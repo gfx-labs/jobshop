@@ -1,0 +1,6 @@
+[
+  {"databaseId": 10, "attempt": 2, "conclusion": "success", "headBranch": "master", "headSha": "ddd", "url": "https://example.com/10", "createdAt": "2026-11-05T12:00:00Z"},
+  {"databaseId": 11, "attempt": 2, "conclusion": "success", "headBranch": "feat/x", "headSha": "eee", "url": "https://example.com/11", "createdAt": "2026-11-05T13:00:00Z"},
+  {"databaseId": 12, "attempt": 1, "conclusion": "success", "headBranch": "master", "headSha": "fff", "url": "https://example.com/12", "createdAt": "2026-11-05T14:00:00Z"},
+  {"databaseId": 13, "attempt": 3, "conclusion": "failure", "headBranch": "feat/y", "headSha": "ggg", "url": "https://example.com/13", "createdAt": "2026-11-05T15:00:00Z"}
+]

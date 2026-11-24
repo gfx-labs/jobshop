@@ -1,0 +1,4 @@
+{"jobs": [
+  {"databaseId": 1301, "name": "lint", "conclusion": "failure", "url": "https://example.com/13/job/1301",
+   "steps": [{"name": "golangci-lint", "conclusion": "failure"}]}
+]}

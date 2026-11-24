@@ -1,0 +1,5 @@
+{"jobs": [
+  {"databaseId": 101, "name": "test", "conclusion": "failure", "url": "https://example.com/1/job/101",
+   "steps": [{"name": "Set up job", "conclusion": "success"}, {"name": "Test", "conclusion": "failure"}, {"name": "Upload", "conclusion": "success"}]},
+  {"databaseId": 102, "name": "lint", "conclusion": "success", "url": "https://example.com/1/job/102", "steps": []}
+]}

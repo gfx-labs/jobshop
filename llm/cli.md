@@ -280,7 +280,8 @@ Commands:
 
   report ci-failures --repo=STRING [flags]
     Group failing tests from the failed-tests artifact of recent failed CI runs,
-    with flaky/broken counts (runs gh).
+    with flaky/broken counts, and list failed jobs and runs that passed on
+    rerun, on master and PR branches (runs gh).
 
   report progress [<note>] [flags]
     Report progress on your ticket.
@@ -2795,7 +2796,8 @@ Commands:
 
   report ci-failures --repo=STRING [flags]
     Group failing tests from the failed-tests artifact of recent failed CI runs,
-    with flaky/broken counts (runs gh).
+    with flaky/broken counts, and list failed jobs and runs that passed on
+    rerun, on master and PR branches (runs gh).
 
   report progress [<note>] [flags]
     Report progress on your ticket.
@@ -2843,7 +2845,8 @@ Flags:
 Usage: jobshop report ci-failures --repo=STRING [flags]
 
 Group failing tests from the failed-tests artifact of recent failed CI runs,
-with flaky/broken counts (runs gh).
+with flaky/broken counts, and list failed jobs and runs that passed on rerun,
+on master and PR branches (runs gh).
 
 Flags:
   -h, --help               Show context-sensitive help.
@@ -2859,6 +2862,8 @@ Flags:
       --branch="master"    Branch whose runs to read.
       --workflow="ci"      Workflow name or file; empty for all.
       --limit=5            How many recent failed runs to read.
+      --rerun-limit=5      How many recent completed runs, any branch, to scan
+                           for reruns.
 ```
 
 ## jobshop report progress

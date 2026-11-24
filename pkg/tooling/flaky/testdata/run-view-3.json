@@ -1,0 +1,7 @@
+{"jobs": [
+  {"databaseId": 300, "name": "test", "conclusion": "success", "url": "https://example.com/3/job/300", "steps": []},
+  {"databaseId": 301, "name": "e2e", "conclusion": "failure", "url": "https://example.com/3/job/301",
+   "steps": [{"name": "Install", "conclusion": "success"}, {"name": "Run Desk e2e", "conclusion": "failure"}]},
+  {"databaseId": 302, "name": "nix", "conclusion": "cancelled", "url": "https://example.com/3/job/302",
+   "steps": [{"name": "Build", "conclusion": "cancelled"}]}
+]}
