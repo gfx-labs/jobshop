@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.52](https://github.com/gfx-labs/jobshop/compare/v0.10.51...v0.10.52) (2026-11-24)
+
+
+### Features
+
+* **linear:** request signed upload URLs ([#1341](https://github.com/gfx-labs/jobshop/issues/1341)) ([#1342](https://github.com/gfx-labs/jobshop/issues/1342)) ([4e6a44f](https://github.com/gfx-labs/jobshop/commit/4e6a44f87995612d7e06a170e070367495873330))
+
 ## [0.10.51](https://github.com/gfx-labs/jobshop/compare/v0.10.50...v0.10.51) (2026-11-24)
 
 
