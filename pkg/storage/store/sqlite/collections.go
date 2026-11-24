@@ -74,6 +74,11 @@ func (g *registry) open(ctx context.Context, s *Store, spec store.CollectionSpec
 					return fmt.Errorf("register collection %s: %w", spec.Name, err)
 				}
 			}
+			if len(spec.Search) > 0 {
+				if err := ensureKeymap(ctx, tx, spec.Name); err != nil {
+					return fmt.Errorf("register collection %s: %w", spec.Name, err)
+				}
+			}
 			return nil
 		})
 		if err != nil {
@@ -240,6 +245,29 @@ func (c *collection) get(key string) *bqb.Query {
 	return bqb.New("SELECT "+columns("")+" FROM records WHERE collection = "+c.lit()+" AND key = ?", key)
 }
 
+// keymap names the table that maps a collection's keys to the rowids of
+// their FTS documents. The FTS table has key UNINDEXED, so deleting a
+// document by key reads every document of the table, while the writer is
+// held (#1338: ~0.3s per journals write on gasserver's database).
+func keymap(name string) string { return "fts_" + name + "_keymap" }
+
+// ensureKeymap creates the key map and, when it did not exist, fills it
+// from the documents the FTS table already has.
+func ensureKeymap(ctx context.Context, tx *sql.Tx, name string) error {
+	var have int
+	if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?", keymap(name)).Scan(&have); err != nil {
+		return err
+	}
+	if have > 0 {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, "CREATE TABLE "+keymap(name)+" (key TEXT PRIMARY KEY, id INTEGER NOT NULL) WITHOUT ROWID"); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, "INSERT OR REPLACE INTO "+keymap(name)+" (key, id) SELECT key, rowid FROM fts_"+name+" ORDER BY rowid")
+	return err
+}
+
 // reindex refreshes key's FTS document.
 func (c *collection) reindex(ctx context.Context, tx *sql.Tx, key string) error {
 	if len(c.spec.Search) == 0 {
@@ -249,13 +277,42 @@ func (c *collection) reindex(ctx context.Context, tx *sql.Tx, key string) error 
 	for i, f := range c.spec.Search {
 		parts[i] = "coalesce(" + field(f.Path) + ", '')"
 	}
-	t := "fts_" + c.spec.Name
-	if _, err := exec(ctx, tx, bqb.New("DELETE FROM "+t+" WHERE key = ?", key)); err != nil {
+	t, km := "fts_"+c.spec.Name, keymap(c.spec.Name)
+	var old int64
+	err := tx.QueryRowContext(ctx, "SELECT id FROM "+km+" WHERE key = ?", key).Scan(&old)
+	switch {
+	case err == nil:
+		if _, err := exec(ctx, tx, bqb.New("DELETE FROM "+t+" WHERE rowid = ?", old)); err != nil {
+			return err
+		}
+	case !errors.Is(err, sql.ErrNoRows):
 		return err
 	}
-	_, err := exec(ctx, tx, bqb.New("INSERT INTO "+t+" (key, body) SELECT key, "+strings.Join(parts, " || char(10) || ")+
-		" FROM records WHERE collection = "+c.lit()+" AND key = ?", key))
+	text, args, err := bqb.New("INSERT INTO "+t+" (key, body) SELECT key, "+strings.Join(parts, " || char(10) || ")+
+		" FROM records WHERE collection = "+c.lit()+" AND key = ?", key).ToSql()
+	if err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, text, args...)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		_, derr := tx.ExecContext(ctx, "DELETE FROM "+km+" WHERE key = ?", key)
+		return errors.Join(err, derr)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, "INSERT OR REPLACE INTO "+km+" (key, id) VALUES (?, ?)", key, id)
 	return err
+}
+
+// write runs fn in a write transaction that the writer log attributes to
+// this collection and key (#1338).
+func (c *collection) write(ctx context.Context, key string, fn func(tx *sql.Tx) error) error {
+	return c.s.WriteTx(withWriteTag(ctx, c.spec.Name, key), fn)
 }
 
 func (c *collection) Put(ctx context.Context, r store.Record) (rec store.Record, created bool, err error) {
@@ -265,7 +322,7 @@ func (c *collection) Put(ctx context.Context, r store.Record) (rec store.Record,
 	if r.Value, err = c.spec.CheckValue(r.Value); err != nil {
 		return rec, false, err
 	}
-	err = c.s.WriteTx(ctx, func(tx *sql.Tx) error {
+	err = c.write(ctx, r.Key, func(tx *sql.Tx) error {
 		now := c.s.Now()
 		at := r.CreatedAt
 		if at.IsZero() {
@@ -327,7 +384,7 @@ func (c *collection) Update(ctx context.Context, r store.Record) (rec store.Reco
 	if r.Value, err = c.spec.CheckValue(r.Value); err != nil {
 		return rec, err
 	}
-	err = c.s.WriteTx(ctx, func(tx *sql.Tx) error {
+	err = c.write(ctx, r.Key, func(tx *sql.Tx) error {
 		now := c.s.Now()
 		q := bqb.New("UPDATE records SET state = ?, value = ?, revision = revision + 1, updated_at = ?", r.State, string(r.Value), ns(now))
 		if r.LeaseUntil.IsZero() {
@@ -429,7 +486,7 @@ func (c *collection) Claim(ctx context.Context, f store.RecordFilter, holder str
 	if f.Empty() || holder == "" || lease <= 0 {
 		return rec, fmt.Errorf("%w: %s: claim needs a filter, a holder and a lease", domain.ErrInvalid, c.spec.Name)
 	}
-	err = c.s.WriteTx(ctx, func(tx *sql.Tx) error {
+	err = c.write(ctx, "", func(tx *sql.Tx) error {
 		for range claimTries {
 			now := c.s.Now()
 			key, err := c.candidate(ctx, tx, f, now)
@@ -513,7 +570,7 @@ func (c *collection) Renew(ctx context.Context, key, holder string, lease time.D
 	if holder == "" || lease <= 0 {
 		return rec, fmt.Errorf("%w: %s: renew needs a holder and a lease", domain.ErrInvalid, c.spec.Name)
 	}
-	err = c.s.WriteTx(ctx, func(tx *sql.Tx) error {
+	err = c.write(ctx, key, func(tx *sql.Tx) error {
 		now := c.s.Now()
 		rec, err = c.one(ctx, tx, bqb.New("UPDATE records SET lease_until = ? WHERE collection = "+c.lit()+
 			" AND key = ? AND holder = ? AND holder != '' AND lease_until > ? RETURNING "+columns(""),
@@ -537,9 +594,14 @@ func (c *collection) Delete(ctx context.Context, f store.RecordFilter) (n int, e
 	if err != nil {
 		return 0, err
 	}
-	err = c.s.WriteTx(ctx, func(tx *sql.Tx) error {
+	err = c.write(ctx, "", func(tx *sql.Tx) error {
 		if len(c.spec.Search) > 0 {
-			if _, err := exec(ctx, tx, bqb.New("DELETE FROM fts_"+c.spec.Name+" WHERE key IN (SELECT key FROM records WHERE ?)", w)); err != nil {
+			// By rowid: a delete by key scans the whole FTS table (#1338).
+			if _, err := exec(ctx, tx, bqb.New("DELETE FROM fts_"+c.spec.Name+" WHERE rowid IN (SELECT id FROM "+keymap(c.spec.Name)+
+				" WHERE key IN (SELECT key FROM records WHERE ?))", w)); err != nil {
+				return err
+			}
+			if _, err := exec(ctx, tx, bqb.New("DELETE FROM "+keymap(c.spec.Name)+" WHERE key IN (SELECT key FROM records WHERE ?)", w)); err != nil {
 				return err
 			}
 		}

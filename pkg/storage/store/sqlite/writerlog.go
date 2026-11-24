@@ -28,6 +28,11 @@ type WriterCall struct {
 	// Step is the supervisor step that made the call ("" outside a tick),
 	// Op the store method ("Expire", "Put").
 	Step, Op string
+	// Collection and Key name the record a collection write is for (#1338):
+	// every collection shares the Put, Update and Claim code, so Op alone
+	// does not say which data held the writer. Key is empty for a call on
+	// no single record.
+	Collection, Key string
 	// Start is when the call asked for the writer.
 	Start time.Time
 	// Wait is how long it queued, Hold how long it kept the writer.
@@ -39,12 +44,27 @@ type WriterCall struct {
 	Active bool
 }
 
-// Label is "step/op", or the op alone.
+// Label is "step/op", or the op alone, with "[collection]" after the op
+// of a collection write. The key is not in it: holders add up by label.
 func (c WriterCall) Label() string {
-	if c.Step == "" {
-		return c.Op
+	op := c.Op
+	if c.Collection != "" {
+		op += "[" + c.Collection + "]"
 	}
-	return c.Step + "/" + c.Op
+	if c.Step == "" {
+		return op
+	}
+	return c.Step + "/" + op
+}
+
+type writeTag struct{ collection, key string }
+
+type writeTagKey struct{}
+
+// withWriteTag marks the write transactions begun with ctx as for key of
+// collection, for the writer log.
+func withWriteTag(ctx context.Context, collection, key string) context.Context {
+	return context.WithValue(ctx, writeTagKey{}, writeTag{collection, key})
 }
 
 // End is when the call let go of the writer (the read time, if Active).
@@ -76,6 +96,9 @@ func (l *writerLog) now() time.Time {
 func (l *writerLog) begin(ctx context.Context) *writerHold {
 	h := &writerHold{log: l}
 	h.call.Step, h.call.Op = store.StepOf(ctx), callerOp()
+	if t, ok := ctx.Value(writeTagKey{}).(writeTag); ok {
+		h.call.Collection, h.call.Key = t.collection, t.key
+	}
 	h.label = h.call.Label()
 	h.call.Start = l.now()
 	l.mu.Lock()

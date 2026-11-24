@@ -282,7 +282,11 @@ type tickReport struct {
 	// Holders are the operations that held the writer during the tick,
 	// longest first, as "step/op=seconds".
 	Holders []string
-	Hints   []string
+	// LongestHold is the single call that held the writer longest in the
+	// tick. Holders add calls up by label, so a long total there can be
+	// many short holds (#1338).
+	LongestHold *sqlite.WriterCall
+	Hints       []string
 }
 
 // report diffs the two snapshots. steps is the tick's seconds per step.
@@ -329,7 +333,7 @@ func (p *tickProbe) report(a, b probeSnap, steps map[string]float64) tickReport 
 		r.Housekeeping = append(r.Housekeeping, h.name)
 	}
 	p.mu.Unlock()
-	r.SlowCall, r.Holders = p.writerEvidence(a.at, b.at, r.SlowestStep)
+	r.SlowCall, r.LongestHold, r.Holders = p.writerEvidence(a.at, b.at, r.SlowestStep)
 	r.Hints = hints(r, d)
 	return r
 }
@@ -339,9 +343,9 @@ const holdersKept = 5
 
 // writerEvidence picks the slowest writer call and the longest holders
 // among the calls that overlap [from, to].
-func (p *tickProbe) writerEvidence(from, to time.Time, step string) (*sqlite.WriterCall, []string) {
+func (p *tickProbe) writerEvidence(from, to time.Time, step string) (slowest, longest *sqlite.WriterCall, holders []string) {
 	if p.writers == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 	var calls []sqlite.WriterCall
 	for _, c := range p.writers() {
@@ -350,7 +354,7 @@ func (p *tickProbe) writerEvidence(from, to time.Time, step string) (*sqlite.Wri
 		}
 	}
 	if len(calls) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	pick := func(only string) *sqlite.WriterCall {
 		var best *sqlite.WriterCall
@@ -364,12 +368,15 @@ func (p *tickProbe) writerEvidence(from, to time.Time, step string) (*sqlite.Wri
 		}
 		return best
 	}
-	slowest := pick(step)
+	slowest = pick(step)
 	if slowest == nil {
 		slowest = pick("")
 	}
 	held := map[string]time.Duration{}
-	for _, c := range calls {
+	for i, c := range calls {
+		if longest == nil || c.Hold > longest.Hold {
+			longest = &calls[i]
+		}
 		// Only the time inside the tick counts.
 		s, e := c.Start.Add(c.Wait), c.End()
 		if s.Before(from) {
@@ -389,11 +396,11 @@ func (p *tickProbe) writerEvidence(from, to time.Time, step string) (*sqlite.Wri
 		return cmp.Compare(x, y)
 	})
 	names = names[:min(len(names), holdersKept)]
-	holders := make([]string, len(names))
+	holders = make([]string, len(names))
 	for i, n := range names {
 		holders[i] = fmt.Sprintf("%s=%.3f", n, held[n].Seconds())
 	}
-	return slowest, holders
+	return slowest, longest, holders
 }
 
 // hints names each candidate cause the evidence supports, so a reader
@@ -455,7 +462,15 @@ func (r tickReport) attrs() []attribute.KeyValue {
 			attribute.String("jobshop.tick.slowest_call", c.Label()),
 			attribute.Float64("jobshop.tick.slowest_call_wait_seconds", c.Wait.Seconds()),
 			attribute.Float64("jobshop.tick.slowest_call_hold_seconds", c.Hold.Seconds()),
-			attribute.String("jobshop.tick.slowest_call_blocked_by", c.BlockedBy))
+			attribute.String("jobshop.tick.slowest_call_blocked_by", c.BlockedBy),
+			attribute.String("jobshop.tick.slowest_call_key", c.Key))
+	}
+	if c := r.LongestHold; c != nil {
+		a = append(a,
+			attribute.String("jobshop.tick.longest_hold_call", c.Label()),
+			attribute.String("jobshop.tick.longest_hold_key", c.Key),
+			attribute.Float64("jobshop.tick.longest_hold_seconds", c.Hold.Seconds()),
+			attribute.Bool("jobshop.tick.longest_hold_active", c.Active))
 	}
 	if len(r.Holders) > 0 {
 		a = append(a, attribute.StringSlice("jobshop.tick.writer_holders", r.Holders))

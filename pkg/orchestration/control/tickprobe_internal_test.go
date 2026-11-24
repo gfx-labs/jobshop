@@ -127,6 +127,8 @@ func TestTickProbeWriter(t *testing.T) {
 	assert.Contains(t, out.String(), "jobshop.tick.slowest_call_wait_seconds=19")
 	assert.Contains(t, out.String(), "jobshop.tick.slowest_call_blocked_by=supervise/Claim")
 	assert.Contains(t, out.String(), "jobshop.tick.writer_holders=")
+	assert.Contains(t, out.String(), "jobshop.tick.longest_hold_call=supervise/Claim")
+	assert.Contains(t, out.String(), "jobshop.tick.longest_hold_seconds=20")
 
 	// A slowest step that made no writer call falls back to the slowest call.
 	r = p.report(a, b, map[string]float64{"probe_outages": 30})
@@ -227,4 +229,28 @@ func TestFirstTicksLogged(t *testing.T) {
 	assert.NotContains(t, out, "tick=3 ")
 	assert.Contains(t, out, "step_supervise=")
 	assert.Contains(t, out, "step_run_triggers=")
+}
+
+// TestTickProbeWriterCollection (#1338): holders of a collection write are
+// told apart by collection, and the longest single hold is named with its
+// key, so many short Puts adding up to the tick are not read as one hold.
+func TestTickProbeWriterCollection(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := newTickProbe(time.Second, filepath.Join(dir, "db"), nil)
+	p.proc = filepath.Join(dir, "proc")
+	a := p.snap()
+	b := a
+	b.at = a.at.Add(10 * time.Second)
+	var calls []sqlite.WriterCall
+	for i := range 8 {
+		calls = append(calls, sqlite.WriterCall{Op: "(*collection).Put", Collection: "inbox", Key: "m", Start: a.at.Add(time.Duration(i) * time.Second), Hold: time.Second})
+	}
+	calls = append(calls, sqlite.WriterCall{Op: "(*collection).Put", Collection: "journals", Key: "js-s-1", Start: a.at.Add(8 * time.Second), Hold: 1500 * time.Millisecond})
+	p.writers = func() []sqlite.WriterCall { return calls }
+	r := p.report(a, b, map[string]float64{"run_triggers": 9})
+	assert.Equal(t, []string{"(*collection).Put[inbox]=8.000", "(*collection).Put[journals]=1.500"}, r.Holders)
+	require.NotNil(t, r.LongestHold)
+	assert.Equal(t, "(*collection).Put[journals]", r.LongestHold.Label())
+	assert.Equal(t, "js-s-1", r.LongestHold.Key)
 }
