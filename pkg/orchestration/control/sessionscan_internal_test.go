@@ -1,9 +1,11 @@
 package control
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -140,4 +142,96 @@ func TestScanSessionsSkipsDeadClosed(t *testing.T) {
 	clear(probes)
 	c.scanSessions(ctx)
 	assert.Equal(t, 1, total(), "only the ticketless dir is probed once the live host is cached dead")
+}
+
+// readCounter counts the store reads of a scan: Get and List calls.
+type readCounter struct {
+	store.Store
+	gets, lists atomic.Int64
+}
+
+func (r *readCounter) Get(ctx context.Context, id string) (domain.Ticket, error) {
+	r.gets.Add(1)
+	return r.Store.Get(ctx, id)
+}
+
+func (r *readCounter) List(ctx context.Context, f store.Filter) ([]domain.Ticket, error) {
+	r.lists.Add(1)
+	return r.Store.List(ctx, f)
+}
+
+// TestScanSessionsFirstScanReadsOnce (#1345): the first scan after a start
+// has a directory for every session ever made, nearly all closed with a
+// dead host. It used to read one ticket per directory (N Gets). It now
+// reads the closed tickets in one List, shared with the Ended backfill, so
+// the walk makes no Get and the reads do not grow with N. Once Ended is
+// filled, a scan with a few new directories keeps its per-directory Get
+// and does not list the closed tickets again.
+func TestScanSessionsFirstScanReadsOnce(t *testing.T) {
+	t.Parallel()
+	walkReads := func(t *testing.T, dirs int) (gets, lists int64) {
+		t.Helper()
+		var log lockedBuf
+		c, _, _ := offTickController(t, quietYAML, &log)
+		c.ctx = t.Context()
+		ctx := t.Context()
+		rc := &readCounter{Store: c.store}
+		c.store = rc
+		for range dirs {
+			s := mkTicket(t, c, store.NewTicket{Kind: domain.KindSession, Pool: "dev", Fields: json.RawMessage(`{"agent":"fake"}`)})
+			require.NoError(t, os.MkdirAll(c.root.SessionDir(s.ID), 0o700))
+			_, err := store.Close(ctx, c.store, "controller", s.ID, nil, "done")
+			require.NoError(t, err)
+		}
+		c.hostAlive = func(string) bool { return false }
+		var gets0 int64
+		c.scanHook = func(name string) {
+			switch name {
+			case "list_closed":
+				gets0 = rc.gets.Load()
+			case "walk":
+				gets = rc.gets.Load() - gets0
+			}
+		}
+		lists0 := rc.lists.Load()
+		c.scanSessions(ctx)
+		lists = rc.lists.Load() - lists0
+		assert.Equal(t, dirs, len(c.sessDead), "every closed dead directory is cached")
+		return gets, lists
+	}
+	g1, l1 := walkReads(t, 20)
+	g2, l2 := walkReads(t, 90)
+	assert.Zero(t, g1, "walk of 20 directories: before #1345 this was 20 Gets")
+	assert.Zero(t, g2, "walk of 90 directories: before #1345 this was 90 Gets")
+	assert.Equal(t, int64(2), l1, "list_open and list_closed")
+	assert.Equal(t, l1, l2, "list calls do not grow with the directory count")
+
+	t.Run("steady state", func(t *testing.T) {
+		t.Parallel()
+		var log lockedBuf
+		c, _, _ := offTickController(t, quietYAML, &log)
+		c.ctx = t.Context()
+		ctx := t.Context()
+		rc := &readCounter{Store: c.store}
+		c.store = rc
+		c.hostAlive = func(string) bool { return false }
+		mk := func() {
+			s := mkTicket(t, c, store.NewTicket{Kind: domain.KindSession, Pool: "dev", Fields: json.RawMessage(`{"agent":"fake"}`)})
+			require.NoError(t, os.MkdirAll(c.root.SessionDir(s.ID), 0o700))
+			_, err := store.Close(ctx, c.store, "controller", s.ID, nil, "done")
+			require.NoError(t, err)
+		}
+		for range 30 {
+			mk()
+		}
+		c.scanSessions(ctx)
+		require.True(t, c.endedFilled)
+		for range 3 {
+			mk()
+		}
+		gets0, lists0 := rc.gets.Load(), rc.lists.Load()
+		c.scanSessions(ctx)
+		assert.Equal(t, int64(3), rc.gets.Load()-gets0, "one Get per new directory")
+		assert.Equal(t, int64(1), rc.lists.Load()-lists0, "only list_open: no closed List once Ended is filled")
+	})
 }

@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"errors"
+	"math"
 	"os"
 	"sync"
 	"time"
@@ -25,15 +26,16 @@ func (c *Controller) reapOrphans(ctx context.Context, open []domain.Ticket) {
 // orphans lists session directories with a live host whose session is not
 // in open.
 func (c *Controller) orphans(ctx context.Context, open []domain.Ticket) []string {
-	return c.orphansWith(ctx, open, nil)
+	return c.orphansWith(ctx, open, c.newClosedSessions(), nil)
 }
 
 // orphansWith is orphans that calls each, when set, with every session
 // directory it checked and how long the check took (JOB-221). A directory
 // whose ticket is closed and whose host is dead goes in sessDead and is
 // not checked again (#1311): sessions are never pruned, so without it the
-// walk costs one host probe per session ever made.
-func (c *Controller) orphansWith(ctx context.Context, open []domain.Ticket, each func(id string, took time.Duration)) []string {
+// walk costs one host probe per session ever made. closed answers whether
+// a directory's ticket is closed without a store read per directory.
+func (c *Controller) orphansWith(ctx context.Context, open []domain.Ticket, closed *closedSessions, each func(id string, took time.Duration)) []string {
 	keep := map[string]bool{}
 	for _, t := range open {
 		keep[t.ID] = true
@@ -63,7 +65,7 @@ func (c *Controller) orphansWith(ctx context.Context, open []domain.Ticket, each
 		start := c.now()
 		if c.hostAliveFn()(c.root.SessionDir(id)) {
 			out = append(out, id)
-		} else if c.ticketClosed(ctx, id) {
+		} else if closed.has(ctx, id) {
 			c.markDead(id)
 		}
 		if each != nil {
@@ -81,14 +83,60 @@ func (c *Controller) hostAliveFn() func(dir string) bool {
 	return session.HostAlive
 }
 
-// ticketClosed reports whether id is a closed session ticket. A directory
-// with no ticket, or a ticket in another state, is not: its host may not
-// have started yet, so it is probed again next scan.
-func (c *Controller) ticketClosed(ctx context.Context, id string) bool {
-	t, err := c.store.Get(ctx, id)
+// directClosedGets is how many directories closedSessions checks with one
+// Get each before it reads every closed session ticket in one List. A
+// steady-state scan has a few new directories, where a Get is cheaper than
+// listing thousands of tickets; the first scan after a start has thousands.
+const directClosedGets = 8
+
+// closedSessions tells whether a session directory's ticket is closed. A
+// directory with no ticket, or a ticket in another state, is not: its host
+// may not have started yet, so it is probed again next scan. Past
+// directClosedGets lookups it answers from one List of the closed session
+// tickets, which scanSessions loads first when backfillEnded needs them
+// anyway (first-scan cost, #1345). One walk owns it; not safe for
+// concurrent use.
+type closedSessions struct {
+	c       *Controller
+	tickets []domain.Ticket
+	ids     map[string]bool
+	loaded  bool
+	gets    int
+}
+
+func (c *Controller) newClosedSessions() *closedSessions { return &closedSessions{c: c} }
+
+// load reads every closed session ticket once.
+func (s *closedSessions) load(ctx context.Context) error {
+	if s.loaded {
+		return nil
+	}
+	closed, err := s.c.store.List(ctx, store.Filter{Kind: domain.KindSession, Status: domain.StatusClosed, Limit: math.MaxInt32})
+	if err != nil {
+		return err
+	}
+	s.tickets, s.loaded = closed, true
+	s.ids = make(map[string]bool, len(closed))
+	for _, t := range closed {
+		s.ids[t.ID] = true
+	}
+	return nil
+}
+
+func (s *closedSessions) has(ctx context.Context, id string) bool {
+	if !s.loaded && s.gets >= directClosedGets {
+		if err := s.load(ctx); err != nil {
+			s.c.log.WarnContext(ctx, "scan sessions: list closed tickets", "err", err)
+		}
+	}
+	if s.loaded {
+		return s.ids[id]
+	}
+	s.gets++
+	t, err := s.c.store.Get(ctx, id)
 	if err != nil {
 		if !errors.Is(err, domain.ErrNotFound) {
-			c.log.WarnContext(ctx, "scan sessions: get ticket", "session", id, "err", err)
+			s.c.log.WarnContext(ctx, "scan sessions: get ticket", "session", id, "err", err)
 		}
 		return false
 	}
