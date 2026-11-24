@@ -49,6 +49,10 @@ type Client struct {
 // maxBody bounds a response body.
 const maxBody = 4 << 20
 
+// fileURLTTL is how long, in seconds, signed upload URLs stay valid. An hour
+// covers a normal step; re-reading the issue returns a fresh link.
+const fileURLTTL = "3600"
+
 // New returns a client for auth. url "" is DefaultAPIURL. The API never
 // redirects; following one would resend the token elsewhere.
 func New(url string, auth apicall.Source) *Client {
@@ -333,6 +337,9 @@ func (c *Client) send(ctx context.Context, tok string, b []byte) (*http.Response
 	}
 	req.Header.Set("Authorization", auth)
 	req.Header.Set("Content-Type", "application/json")
+	// Linear signs uploads.linear.app URLs in the response when asked, so a
+	// session can fetch an issue's images without holding a token (#1341).
+	req.Header.Set("public-file-urls-expire-in", fileURLTTL)
 	apicall.Sending(ctx, tok)
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
