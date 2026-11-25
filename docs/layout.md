@@ -146,7 +146,8 @@ jobshop/
 │       │                     table (JOB-165); cmd/archcheck runs it in CI
 │       ├── runbook/          docs/verify runbook parser and runner (#635); the CLI's
 │       │                     `runbook run` is its one caller, so it stays a package
-│       └── flaky/            `go test -json` flake classifier; cmd/ci-flaky (#510)
+│       ├── flaky/            `go test -json` flake classifier; cmd/ci-flaky (#510)
+│       └── notes/            `report notes`: stale "Not done" lines in docs/notes (#1362)
 ├── docs/                     plan.md, data-model.md, layout.md
 ├── ui/                       Desk UI source (React, Vite); builds into pkg/transport/desk/dist
 ├── examples/                 sample jobshop.yaml, agent prompts

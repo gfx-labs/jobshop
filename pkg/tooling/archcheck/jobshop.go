@@ -160,6 +160,7 @@ func owners() []Owner {
 		{Pkg: "./pkg/tooling/runbook", Target: "stay", Family: "tooling", Child: "-"},
 		{Pkg: "./pkg/tooling/flaky", Target: "stay", Family: "tooling", Child: "-"},
 		{Pkg: "./pkg/tooling/flaky/cmd/ci-flaky", Target: "stay", Family: "tooling", Child: "-"},
+		{Pkg: "./pkg/tooling/notes", Target: "stay", Family: "tooling", Child: "-"},
 		{Pkg: "./pkg/transport/rpc/rpcschema/cmd/deskgen", Target: "stay", Family: "tooling", Child: "-"},
 		{Pkg: "./pkg/tooling/archcheck", Target: "stay", Family: "tooling", Child: "-"},
 		{Pkg: "./pkg/tooling/archcheck/cmd/archcheck", Target: "stay", Family: "tooling", Child: "-"},
