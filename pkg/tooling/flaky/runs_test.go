@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // flagVal returns the argument after flag, or "".
@@ -148,22 +149,46 @@ func TestReportReruns(t *testing.T) {
 
 func TestReportJobGroups(t *testing.T) {
 	rep := report(t)
-	if len(rep.Jobs) != 3 {
-		t.Fatalf("groups %+v", rep.Jobs)
+	type row struct {
+		job, step, err   string
+		count, recovered int
+		runs             []int64
 	}
-	e2e := rep.Jobs[0]
-	if e2e.Job != "e2e" || e2e.Step != "Run Desk e2e" || e2e.Count != 4 || e2e.Recovered != 2 ||
-		!reflect.DeepEqual(e2e.Runs, []int64{13, 11, 10, 3}) || e2e.Error != "error: page crashed" {
-		t.Fatalf("e2e group %+v", e2e)
+	var got []row
+	for _, g := range rep.Jobs {
+		got = append(got, row{g.Job, g.Step, g.Error, g.Count, g.Recovered, g.Runs})
 	}
-	test := rep.Jobs[1]
-	if test.Job != "test" || test.Step != "Test" || test.Count != 2 || test.Recovered != 0 ||
-		!reflect.DeepEqual(test.Runs, []int64{2, 1}) || test.Error != "FAIL\texample.com/a\t0.5s" {
-		t.Fatalf("test group %+v", test)
+	// One group per job, step and error line, so two failing tests of one
+	// job are two groups.
+	want := []row{
+		{"e2e", "Run Desk e2e", "", 1, 1, []int64{11}},
+		{"e2e", "Run Desk e2e", "error: page crashed", 1, 0, []int64{13}},
+		{"e2e", "Run Desk e2e", "panic: runtime error: invalid memory address or nil pointer dereference [recovered]", 1, 0, []int64{3}},
+		{"e2e", "Run Desk e2e", "panic: send on closed channel", 1, 1, []int64{10}},
+		{"lint", "golangci-lint", "Error: issues found", 1, 0, []int64{13}},
+		{"test", "Test", "--- FAIL: TestA (0.01s)", 1, 0, []int64{1}},
+		{"test", "Test", "FAIL\texample.com/a\t0.5s", 1, 0, []int64{2}},
 	}
-	lint := rep.Jobs[2]
-	if lint.Job != "lint" || lint.Count != 1 || lint.Error != "Error: issues found" {
-		t.Fatalf("lint group %+v", lint)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("groups %+v", got)
+	}
+}
+
+// The same failing test in two runs is one group even when its duration
+// differs (#1352).
+func TestGroupJobsByErrorLine(t *testing.T) {
+	at := func(h int) time.Time { return time.Date(2026, 11, 5, h, 0, 0, 0, time.UTC) }
+	job := func(err string) []FailedJob {
+		return []FailedJob{{Name: "test", Step: "Test", Error: err}}
+	}
+	got := GroupJobs([]Run{
+		{ID: 1, CreatedAt: at(1), FailedJobs: job("--- FAIL: TestA (0.01s)")},
+		{ID: 2, CreatedAt: at(2), FailedJobs: job("--- FAIL: TestA (1.20s)")},
+		{ID: 3, CreatedAt: at(3), FailedJobs: job("--- FAIL: TestB (0.01s)")},
+	}, nil)
+	if len(got) != 2 || got[0].Count != 2 || got[0].Error != "--- FAIL: TestA (1.20s)" ||
+		!reflect.DeepEqual(got[0].Runs, []int64{2, 1}) || got[1].Error != "--- FAIL: TestB (0.01s)" {
+		t.Fatalf("groups %+v", got)
 	}
 }
 
@@ -222,6 +247,17 @@ func TestReportRerunLimit(t *testing.T) {
 	}
 }
 
+// An INFO line after the failure is not the error (#1352).
+func TestFirstErrorLineInfoAfterFail(t *testing.T) {
+	log, err := os.ReadFile("testdata/log-info-after-fail.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := FirstErrorLine(log), "--- FAIL: TestHost (0.30s)"; got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
 func TestFirstErrorLine(t *testing.T) {
 	long := strings.Repeat("x", 300)
 	for _, tc := range []struct{ name, log, want string }{
@@ -230,6 +266,11 @@ func TestFirstErrorLine(t *testing.T) {
 		{"truncated", "a\tb\t2026-01-02T03:04:05Z error: " + long + "\n", "error: " + long[:193]},
 		{"none", "a\tb\t2026-01-02T03:04:05Z all good\n", ""},
 		{"empty", "", ""},
+		{"fail beats earlier generic", "Error: x\n--- FAIL: TestA (0.01s)\n", "--- FAIL: TestA (0.01s)"},
+		{"package fail", "t\ts\t2026-01-02T03:04:05Z ok  \ta\nt\ts\t2026-01-02T03:04:06Z FAIL\texample.com/a\t0.5s\nt\ts\t2026-01-02T03:04:07Z FAIL\n", "FAIL\texample.com/a\t0.5s"},
+		{"info skipped in fallback", "level=INFO msg=\"error: none\"\nerror: real\n", "error: real"},
+		{"only info", "2026-01-02T03:04:05Z level=DEBUG msg=\"Error: x\"\n", ""},
+		{"FAIL inside word", "FAILED to start\n", ""},
 	} {
 		if got := FirstErrorLine([]byte(tc.log)); got != tc.want {
 			t.Errorf("%s: got %q want %q", tc.name, got, tc.want)

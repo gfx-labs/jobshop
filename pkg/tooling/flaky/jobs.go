@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -46,7 +47,7 @@ type RerunRun struct {
 	FailedJobs []FailedJob `json:"failed_jobs,omitempty"`
 }
 
-// JobGroup is one job and step across the runs it failed in.
+// JobGroup is one job, step and error line across the runs it failed in.
 type JobGroup struct {
 	Job  string `json:"job"`
 	Step string `json:"step,omitempty"`
@@ -55,16 +56,16 @@ type JobGroup struct {
 	// that finally passed.
 	Count     int `json:"count"`
 	Recovered int `json:"recovered"`
-	// Error is the newest instance's error line that has one.
+	// Error is the newest instance's error line; groups are keyed by it.
 	Error string    `json:"error,omitempty"`
 	Runs  []int64   `json:"runs"`
 	Last  time.Time `json:"last"`
 }
 
 // GroupJobs groups the failed jobs of failed runs and of rerun runs by job
-// and step name, most failures first.
+// step name and error line (without its duration), most failures first.
 func GroupJobs(runs []Run, reruns []RerunRun) []JobGroup {
-	type key struct{ job, step string }
+	type key struct{ job, step, err string }
 	type inst struct {
 		job   FailedJob
 		run   int64
@@ -86,18 +87,15 @@ func GroupJobs(runs []Run, reruns []RerunRun) []JobGroup {
 	sort.SliceStable(all, func(i, j int) bool { return all[i].at.After(all[j].at) })
 	byKey := map[key]*JobGroup{}
 	for _, in := range all {
-		k := key{in.job.Name, in.job.Step}
+		k := key{in.job.Name, in.job.Step, errorKey(in.job.Error)}
 		g := byKey[k]
 		if g == nil {
-			g = &JobGroup{Job: k.job, Step: k.step, Last: in.at}
+			g = &JobGroup{Job: k.job, Step: k.step, Error: in.job.Error, Last: in.at}
 			byKey[k] = g
 		}
 		g.Count++
 		if in.saved {
 			g.Recovered++
-		}
-		if g.Error == "" {
-			g.Error = in.job.Error
 		}
 		if !containsID(g.Runs, in.run) {
 			g.Runs = append(g.Runs, in.run)
@@ -114,7 +112,10 @@ func GroupJobs(runs []Run, reruns []RerunRun) []JobGroup {
 		if out[i].Job != out[j].Job {
 			return out[i].Job < out[j].Job
 		}
-		return out[i].Step < out[j].Step
+		if out[i].Step != out[j].Step {
+			return out[i].Step < out[j].Step
+		}
+		return out[i].Error < out[j].Error
 	})
 	return out
 }
@@ -195,24 +196,67 @@ func (g GH) firstError(ctx context.Context, run, job int64) (string, error) {
 	return FirstErrorLine(out), nil
 }
 
-var errorMarkers = []string{"panic:", "FAIL", "Error:", "error:"}
+// errorMarkers are the generic markers, tried only when the log has no
+// failing test line.
+var errorMarkers = []string{"Error:", "error:"}
 
-// FirstErrorLine returns the first line of a gh job log that has a panic or
-// error marker, without the "job<TAB>step<TAB>timestamp" prefix gh adds,
-// cut to 200 characters.
+// FirstErrorLine returns the line of a gh job log that names the failure,
+// without the "job<TAB>step<TAB>timestamp" prefix gh adds, cut to 200
+// characters: the first "--- FAIL", "panic:" or "FAIL <pkg>" line. Without
+// one it falls back to the first line with an error marker. Structured log
+// lines (level=INFO, level=DEBUG) never count: they often follow the
+// failure and say nothing about it (#1352).
 func FirstErrorLine(log []byte) string {
 	sc := bufio.NewScanner(bytes.NewReader(log))
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	generic := ""
 	for sc.Scan() {
 		line := logText(sc.Text())
+		if isLogLine(line) {
+			continue
+		}
+		if isTestFailure(line) {
+			return truncate(line, maxErrorLen)
+		}
+		if generic != "" {
+			continue
+		}
 		for _, m := range errorMarkers {
 			if strings.Contains(line, m) {
-				return truncate(line, maxErrorLen)
+				generic = truncate(line, maxErrorLen)
+				break
 			}
 		}
 	}
-	return ""
+	return generic
 }
+
+// isTestFailure is a go test failure line: a failed test, a panic or a
+// failed package.
+func isTestFailure(line string) bool {
+	if strings.HasPrefix(line, "--- FAIL") || strings.Contains(line, "panic:") {
+		return true
+	}
+	rest, ok := strings.CutPrefix(line, "FAIL")
+	return ok && rest != "" && (rest[0] == ' ' || rest[0] == '\t')
+}
+
+// isLogLine is a structured log line (slog text, level=INFO and so on).
+func isLogLine(line string) bool {
+	for _, lv := range []string{"INFO", "DEBUG", "info", "debug"} {
+		if strings.Contains(line, "level="+lv) {
+			return true
+		}
+	}
+	return false
+}
+
+// durationSuffix is the time go test appends to a failed test or package.
+var durationSuffix = regexp.MustCompile(`[ \t]+\(?\d+(\.\d+)?s\)?$`)
+
+// errorKey is an error line without its duration, so the same failing test
+// in two runs is one group.
+func errorKey(s string) string { return durationSuffix.ReplaceAllString(s, "") }
 
 // logText drops the job and step columns and the timestamp of a gh log line.
 func logText(line string) string {
