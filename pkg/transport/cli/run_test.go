@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/gfx-labs/jobshop/pkg/domain"
+	"github.com/gfx-labs/jobshop/pkg/orchestration/control/controltest"
 	"github.com/gfx-labs/jobshop/pkg/transport/rpc"
 )
 
@@ -148,4 +149,72 @@ func TestPrintRunReviewRounds(t *testing.T) {
 	}))
 	assert.Contains(t, buf.String(), "changes requested by review (round 2)")
 	assert.Contains(t, buf.String(), "review rounds 2/3")
+}
+
+func TestRunListStateEnum(t *testing.T) {
+	assert.Equal(t, "open", parse(t, "run", "list", "-s", "open").Run.List.State)
+	assert.True(t, parse(t, "run", "list", "--brief").Run.List.Brief)
+	var r root
+	p, err := kong.New(&r, kong.Exit(func(int) { t.Fatal("exit") }))
+	require.NoError(t, err)
+	_, err = p.Parse([]string{"run", "list", "-s", "bogus"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "open")
+}
+
+// TestRunListBrief: --brief prints only the six listed fields per run, in
+// the same order; the default output keeps the full tickets; -s open drops
+// done and cancelled runs (#1353).
+func TestRunListBrief(t *testing.T) {
+	root := controltest.NewRoot(t, `projects: {js: {}}
+agents: {worker: {command: echo}}
+pools: {dev: {agent: worker, max_sessions: 0, dir: $ROOT}}
+workflows:
+  example:
+    steps:
+      - {id: inspect, pool: dev, prompt: Inspect, title: Inspect}
+`)
+	controller := controltest.StartWith(t, root)
+	var open, cancelled rpc.RunResult
+	controller.Call(rpc.MethodRunStart, rpc.RunStartParams{Workflow: "example", Key: "a", Title: "first"}, &open)
+	controller.Call(rpc.MethodRunStart, rpc.RunStartParams{Workflow: "example", Key: "b", Title: "second"}, &cancelled)
+	controller.Call(rpc.MethodRunCancel, rpc.IDParams{ID: cancelled.Run.ID}, nil)
+
+	old := stdout
+	t.Cleanup(func() { stdout = old })
+	list := func(args ...string) []map[string]any {
+		t.Helper()
+		var out bytes.Buffer
+		stdout = &out
+		require.Equal(t, 0, Main(append([]string{"--socket", root.AdminSocket(), "run", "list"}, args...), nil))
+		var rows []map[string]any
+		require.NoError(t, json.Unmarshal(out.Bytes(), &rows))
+		return rows
+	}
+
+	full := list()
+	require.Len(t, full, 2)
+	assert.Contains(t, full[0], "fields", "default output keeps the full ticket")
+	assert.Contains(t, full[0], "status")
+
+	brief := list("--brief")
+	require.Len(t, brief, 2)
+	for _, row := range brief {
+		keys := []string{}
+		for k := range row {
+			keys = append(keys, k)
+		}
+		assert.ElementsMatch(t, []string{"id", "state", "workflow", "key", "title", "resolution"}, keys)
+	}
+	assert.Equal(t, map[string]any{
+		"id": cancelled.Run.ID, "state": "cancelled", "workflow": "example", "key": "b", "title": "second", "resolution": "cancelled",
+	}, brief[0], "newest first")
+	assert.Equal(t, map[string]any{
+		"id": open.Run.ID, "state": "running", "workflow": "example", "key": "a", "title": "first", "resolution": "",
+	}, brief[1])
+
+	live := list("-s", "open", "--brief")
+	require.Len(t, live, 1)
+	assert.Equal(t, open.Run.ID, live[0]["id"])
+	assert.Empty(t, list("-s", "done"))
 }

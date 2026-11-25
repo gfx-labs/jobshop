@@ -17,7 +17,7 @@ failed attempt; a plain release is one).
    push superseded that run, it is not red. Wait the same way on the
    newest master commit instead.
    Red: unless a `ci-repair` run for
-   that SHA is open (`jobshop run list`), file a priority-0 dev ticket
+   that SHA is open (`jobshop run list --brief -s open`), file a priority-0 dev ticket
    for it (`--pool {{.pool_prefix}}dev -p 0`), comment it here, and
    `jobshop close -r failed`.
    A newer master commit that contains <sha> (`git merge-base

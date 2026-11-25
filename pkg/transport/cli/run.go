@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -49,15 +50,58 @@ func (c runShowCmd) Run(g *Globals) error {
 
 type runListCmd struct {
 	Project  string `help:"Project."`
-	State    string `short:"s" enum:",running,needs_human,done,cancelled" default:"" help:"Run state."`
+	State    string `short:"s" enum:",open,running,needs_human,done,cancelled" default:"" help:"Run state; open is running and needs_human."`
 	Workflow string `help:"Only runs of this workflow (exact name)."`
 	Key      string `help:"Only runs with this key (exact), closed ones included."`
 	Limit    int    `short:"n" help:"Max results (default 500)."`
+	Brief    bool   `help:"Per run only id, state, workflow, key, title and resolution, not the full fields."`
 	JSON     bool   `help:"Accepted and ignored: the output is always JSON."`
 }
 
+func (c runListCmd) params() rpc.RunListParams {
+	return rpc.RunListParams{Project: c.Project, State: c.State, Workflow: c.Workflow, Key: c.Key, Limit: c.Limit}
+}
+
 func (c runListCmd) Run(g *Globals) error {
-	return g.call(rpc.MethodRunList, rpc.RunListParams{Project: c.Project, State: c.State, Workflow: c.Workflow, Key: c.Key, Limit: c.Limit}, nil)
+	if !c.Brief {
+		return g.call(rpc.MethodRunList, c.params(), nil)
+	}
+	var runs []domain.Ticket
+	if err := g.call(rpc.MethodRunList, c.params(), &runs); err != nil {
+		return err
+	}
+	out, err := briefRuns(runs)
+	if err != nil {
+		return err
+	}
+	raw, err := json.Marshal(out)
+	if err != nil {
+		return err
+	}
+	return printJSON(raw)
+}
+
+// briefRun is one line of `run list --brief`: what a planner pass reads,
+// without the run's inputs (about 7 KB each, #1353).
+type briefRun struct {
+	ID         string `json:"id"`
+	State      string `json:"state"`
+	Workflow   string `json:"workflow"`
+	Key        string `json:"key"`
+	Title      string `json:"title"`
+	Resolution string `json:"resolution"`
+}
+
+func briefRuns(runs []domain.Ticket) ([]briefRun, error) {
+	out := make([]briefRun, 0, len(runs))
+	for _, t := range runs {
+		f, err := domain.DecodeFields[domain.RunFields](t)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, briefRun{ID: t.ID, State: f.State, Workflow: f.Workflow, Key: f.Key, Title: t.Title, Resolution: t.Resolution})
+	}
+	return out, nil
 }
 
 type runCancelCmd struct {

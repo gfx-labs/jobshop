@@ -10,7 +10,7 @@ no branch, commit, push, PR, revert or merge here.
    --state merged --search <sha>`). An infrastructure flake (runner lost,
    network, cache): `gh run rerun <id> --failed` once, comment it, close
    with `--outcome flake-rerun`.
-3. Deduplicate: `jobshop run list` for an open pr-work run whose task
+3. Deduplicate: `jobshop run list --brief -s open` for an open pr-work run whose task
    names this failure, and open PRs that fix it. Found: comment the new
    evidence on it, close with `--outcome duplicate`.
 4. Otherwise start one repair: `jobshop run start pr-work --var
