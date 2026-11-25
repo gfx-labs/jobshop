@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.10.54](https://github.com/gfx-labs/jobshop/compare/v0.10.53...v0.10.54) (2026-11-25)
+
+
+### Features
+
+* **cli:** run list --brief and -s open ([#1353](https://github.com/gfx-labs/jobshop/issues/1353)) ([#1356](https://github.com/gfx-labs/jobshop/issues/1356)) ([4e0ec20](https://github.com/gfx-labs/jobshop/commit/4e0ec202fbad79a1578f5600d82c0da2758657c7))
+
+
+### Bug fixes
+
+* **flaky:** report the failing test line in ci-failures ([#1352](https://github.com/gfx-labs/jobshop/issues/1352)) ([#1355](https://github.com/gfx-labs/jobshop/issues/1355)) ([f0bc19d](https://github.com/gfx-labs/jobshop/commit/f0bc19df35607395f2d2114e1b68b83ebe23a91b))
+
+
+### Performance
+
+* **control:** probe session hosts in parallel in the first scan walk ([#1354](https://github.com/gfx-labs/jobshop/issues/1354)) ([#1357](https://github.com/gfx-labs/jobshop/issues/1357)) ([7295179](https://github.com/gfx-labs/jobshop/commit/72951794c5b908861f9520c3c025c97ab8b3d357))
+
 ## [0.10.53](https://github.com/gfx-labs/jobshop/compare/v0.10.52...v0.10.53) (2026-11-24)
 
 
