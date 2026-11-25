@@ -49,7 +49,7 @@ resumes here within a minute of CI finishing. If it resumes with
 `sleep` or defer with a fixed `release --until` for CI.
 
 1. Master CI red: merge nothing. Make sure a fix is under way (a
-   `ci-repair` run in `jobshop run list`, or an open dev ticket); file a
+   `ci-repair` run in `jobshop run list --brief -s open`, or an open dev ticket); file a
    priority-0 dev ticket if not. Wait for
    master to go green (poll `gh run list --branch master --limit 1`),
    then start over from the top.

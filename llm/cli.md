@@ -2290,11 +2290,13 @@ Flags:
                            ($JOBSHOP_SOCKET).
 
       --project=STRING     Project.
-  -s, --state=""           Run state.
+  -s, --state=""           Run state; open is running and needs_human.
       --workflow=STRING    Only runs of this workflow (exact name).
       --key=STRING         Only runs with this key (exact), closed ones
                            included.
   -n, --limit=INT          Max results (default 500).
+      --brief              Per run only id, state, workflow, key, title and
+                           resolution, not the full fields.
       --json               Accepted and ignored: the output is always JSON.
 ```
 

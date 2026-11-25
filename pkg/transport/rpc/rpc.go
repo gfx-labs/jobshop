@@ -1500,7 +1500,8 @@ type BatchListParams struct {
 	Limit   int    `json:"limit,omitempty"`
 }
 
-// RunListParams selects runs. State is a store.Run* value.
+// RunListParams selects runs. State is a domain.Run* value, or "open" for
+// runs that are neither done nor cancelled.
 type RunListParams struct {
 	Project  string `json:"project,omitempty"`
 	State    string `json:"state,omitempty"`

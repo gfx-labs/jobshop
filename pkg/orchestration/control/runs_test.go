@@ -637,3 +637,30 @@ func TestRunListWorkflowKey(t *testing.T) {
 	assert.Empty(t, ids(rpc.RunListParams{Key: "shared", State: domain.RunDone}))
 	assert.Empty(t, ids(rpc.RunListParams{Workflow: "nope"}))
 }
+
+// TestRunListOpen: state open lists running and needs_human runs, not
+// done or cancelled ones (#1353).
+func TestRunListOpen(t *testing.T) {
+	admin := runRoot(t)
+	running := startRun(t, admin, rpc.RunStartParams{Workflow: "pr", Vars: map[string]string{"issue": "1"}})
+	stuck := startRun(t, admin, rpc.RunStartParams{Workflow: "pr", Vars: map[string]string{"issue": "2"}})
+	cancelled := startRun(t, admin, rpc.RunStartParams{Workflow: "pr", Vars: map[string]string{"issue": "3"}})
+	finished := startRun(t, admin, rpc.RunStartParams{Workflow: "pr", Vars: map[string]string{"issue": "4"}})
+	closeStep(t, admin, stuck.Steps[0].ID, "done")
+	closeStep(t, admin, stuck.Steps[1].ID, "failed")
+	closeStep(t, admin, stuck.Steps[1].ID, "failed")
+	require.Equal(t, domain.RunNeedsHuman, runState(t, showRun(t, admin, stuck.Run.ID)))
+	require.NoError(t, admin.Call(t.Context(), rpc.MethodRunCancel, rpc.IDParams{ID: cancelled.Run.ID}, nil))
+	for _, s := range finished.Steps {
+		closeStep(t, admin, s.ID, "done")
+	}
+	require.Equal(t, domain.RunDone, runState(t, showRun(t, admin, finished.Run.ID)))
+
+	var runs []domain.Ticket
+	require.NoError(t, admin.Call(t.Context(), rpc.MethodRunList, rpc.RunListParams{State: "open"}, &runs))
+	got := []string{}
+	for _, r := range runs {
+		got = append(got, r.ID)
+	}
+	assert.Equal(t, []string{stuck.Run.ID, running.Run.ID}, got)
+}

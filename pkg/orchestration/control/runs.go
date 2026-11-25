@@ -535,8 +535,18 @@ func (c *Controller) runList(ctx context.Context, sc scope, p rpc.RunListParams)
 	if !sc.admin {
 		p.Project = sc.project
 	}
-	return c.store.List(ctx, store.Filter{Kind: domain.KindRun, Project: p.Project, State: p.State, Workflow: p.Workflow, Key: p.Key, Order: store.OrderNewest, Limit: p.Limit})
+	f := store.Filter{Kind: domain.KindRun, Project: p.Project, State: p.State, Workflow: p.Workflow, Key: p.Key, Order: store.OrderNewest, Limit: p.Limit}
+	if p.State == runListOpen {
+		// Running and needs_human runs are the ones not yet closed.
+		f.State = ""
+		f.Statuses = []domain.Status{domain.StatusOpen, domain.StatusInProgress}
+	}
+	return c.store.List(ctx, f)
 }
+
+// runListOpen is the RunListParams.State that selects every run not done or
+// cancelled (#1353).
+const runListOpen = "open"
 
 // setRunState writes fields.state, closing the run with resolution when
 // it is not empty.

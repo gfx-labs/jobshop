@@ -29,7 +29,7 @@ Each planning ticket:
    (`gh pr list --state merged --limit 20`) and master CI
    (`gh run list --branch master --limit 5`).
 3. If master CI is red and no `ci-repair` run is open for the failing
-   SHA (`jobshop run list`), file a priority-0 dev ticket for it first.
+   SHA (`jobshop run list --brief -s open`), file a priority-0 dev ticket for it first.
    Then read the last day's incidents: `jobshop report incidents --since 24h`.
    For each cause that recurs, file one dev ticket with the evidence
    (counts, times, ids), unless one is open (`jobshop ticket list -s open`).
