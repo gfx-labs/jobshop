@@ -3,8 +3,11 @@ package control
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -234,4 +237,49 @@ func TestScanSessionsFirstScanReadsOnce(t *testing.T) {
 		assert.Equal(t, int64(3), rc.gets.Load()-gets0, "one Get per new directory")
 		assert.Equal(t, int64(1), rc.lists.Load()-lists0, "only list_open: no closed List once Ended is filled")
 	})
+}
+
+// TestScanSessionsParallelProbe (#1354): a walk with many directories to
+// probe overlaps the probes, but still reports each directory once, in
+// directory order, with the same orphans as a sequential walk. The first
+// probe waits for a second one to start, so a sequential walk would hang.
+func TestScanSessionsParallelProbe(t *testing.T) {
+	t.Parallel()
+	var log lockedBuf
+	c, _, _ := offTickController(t, quietYAML, &log)
+	c.ctx = t.Context()
+	n := parallelProbeMin * 3
+	var ids, live []string
+	for i := range n {
+		id := fmt.Sprintf("js-s-%04d", i)
+		require.NoError(t, os.MkdirAll(c.root.SessionDir(id), 0o700))
+		ids = append(ids, id)
+		if i%50 == 7 {
+			live = append(live, id)
+		}
+	}
+	var mu sync.Mutex
+	probes := map[string]int{}
+	overlap := make(chan struct{})
+	var first atomic.Bool
+	var release sync.Once
+	c.hostAlive = func(dir string) bool {
+		id := filepath.Base(dir)
+		mu.Lock()
+		probes[id]++
+		mu.Unlock()
+		if first.CompareAndSwap(false, true) {
+			<-overlap
+		} else {
+			release.Do(func() { close(overlap) })
+		}
+		return slices.Contains(live, id)
+	}
+	var seen []string
+	got := c.orphansWith(t.Context(), nil, c.newClosedSessions(), func(id string, _ time.Duration) { seen = append(seen, id) })
+	assert.Equal(t, live, got, "orphans keep directory order")
+	assert.Equal(t, ids, seen, "each reports every directory once, in order")
+	for _, id := range ids {
+		assert.Equal(t, 1, probes[id], id)
+	}
 }
