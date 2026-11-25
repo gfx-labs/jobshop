@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gfx-labs/jobshop/pkg/domain"
@@ -44,35 +45,82 @@ func (c *Controller) orphansWith(ctx context.Context, open []domain.Ticket, clos
 	if err != nil {
 		return nil
 	}
-	var out []string
+	// Decide which directories need a probe first, so the probes can run
+	// together; the results are applied in directory order below.
+	var probe []string
 	for _, e := range entries {
 		id := e.Name()
 		if keep[id] {
 			// Open again (a closed session can be reopened): forget it
 			// so the next time it closes its host is checked.
 			c.forgetDead(id)
-			if each != nil {
-				each(id, 0)
-			}
-			continue
+		} else if !c.isDead(id) {
+			probe = append(probe, id)
 		}
-		if c.isDead(id) {
-			if each != nil {
-				each(id, 0)
+	}
+	alive, took := c.probeHosts(probe)
+	var out []string
+	p := 0
+	for _, e := range entries {
+		id := e.Name()
+		var d time.Duration
+		if p < len(probe) && probe[p] == id {
+			if alive[p] {
+				out = append(out, id)
+			} else if closed.has(ctx, id) {
+				c.markDead(id)
 			}
-			continue
-		}
-		start := c.now()
-		if c.hostAliveFn()(c.root.SessionDir(id)) {
-			out = append(out, id)
-		} else if closed.has(ctx, id) {
-			c.markDead(id)
+			d = took[p]
+			p++
 		}
 		if each != nil {
-			each(id, c.since(start))
+			each(id, d)
 		}
 	}
 	return out
+}
+
+// parallelProbeMin is how many directories a walk must probe before it
+// probes them from several goroutines. Each probe opens two files; on the
+// first scan after a start (thousands of directories, cold inode cache)
+// the opens wait on the disk, and overlapping them cuts the walk (#1354).
+// A steady-state scan probes a few new directories, which stay in order.
+const parallelProbeMin = 64
+
+// probeWorkers bounds the goroutines of one parallel probe.
+const probeWorkers = 8
+
+// probeHosts reports, for each id, whether its host runs and how long the
+// probe took, in the order of ids.
+func (c *Controller) probeHosts(ids []string) (alive []bool, took []time.Duration) {
+	alive, took = make([]bool, len(ids)), make([]time.Duration, len(ids))
+	fn := c.hostAliveFn()
+	one := func(i int) {
+		start := c.now()
+		alive[i] = fn(c.root.SessionDir(ids[i]))
+		took[i] = c.since(start)
+	}
+	if len(ids) < parallelProbeMin {
+		for i := range ids {
+			one(i)
+		}
+		return alive, took
+	}
+	var wg sync.WaitGroup
+	var next atomic.Int64
+	for range probeWorkers {
+		wg.Go(func() {
+			for {
+				i := int(next.Add(1)) - 1
+				if i >= len(ids) {
+					return
+				}
+				one(i)
+			}
+		})
+	}
+	wg.Wait()
+	return alive, took
 }
 
 // hostAliveFn is session.HostAlive; tests replace hostAlive to count probes.
