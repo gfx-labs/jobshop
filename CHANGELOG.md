@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.56](https://github.com/gfx-labs/jobshop/compare/v0.10.55...v0.10.56) (2026-11-26)
+
+
+### Performance
+
+* **control:** read closed sessions as ids and an ended flag in scan_sessions ([#1361](https://github.com/gfx-labs/jobshop/issues/1361)) ([#1367](https://github.com/gfx-labs/jobshop/issues/1367)) ([9ffd3b1](https://github.com/gfx-labs/jobshop/commit/9ffd3b12bc8944c9470f2167ab347af058faa2f0))
+
 ## [0.10.55](https://github.com/gfx-labs/jobshop/compare/v0.10.54...v0.10.55) (2026-11-26)
 
 
