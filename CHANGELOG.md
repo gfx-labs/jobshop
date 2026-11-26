@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.58](https://github.com/gfx-labs/jobshop/compare/v0.10.57...v0.10.58) (2026-11-26)
+
+
+### Performance
+
+* **store:** give sqlite readers a 16 MiB page cache so List sorts in memory ([#1372](https://github.com/gfx-labs/jobshop/issues/1372)) ([#1377](https://github.com/gfx-labs/jobshop/issues/1377)) ([b4f1f44](https://github.com/gfx-labs/jobshop/commit/b4f1f447c0104c8cd0cdf162bc00ef84479a1bbd))
+
 ## [0.10.57](https://github.com/gfx-labs/jobshop/compare/v0.10.56...v0.10.57) (2026-11-26)
 
 
