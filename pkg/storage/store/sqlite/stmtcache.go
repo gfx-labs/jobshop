@@ -9,8 +9,8 @@ import (
 )
 
 // stmtCacheMax bounds the cache. sqldb queries are a fixed set, but
-// list queries (LabelsFor) expand to one text per argument count, so the cache
-// stops growing once full and later texts run unprepared (#433).
+// queries built in Go (List filters, IN lists) can make many texts, so the
+// cache stops growing once full and later texts run unprepared (#433).
 const stmtCacheMax = 512
 
 // stmtCache keeps one prepared statement per query text. Profiling the

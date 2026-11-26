@@ -15,8 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// sqldbQueries returns every named query text in pgdb, with the
-// LabelsFor list filled in.
+// sqldbQueries returns every named query text in pgdb.
 func sqldbQueries(t *testing.T) []string {
 	t.Helper()
 	files, err := filepath.Glob("pgdb/*.go")
@@ -41,7 +40,7 @@ func sqldbQueries(t *testing.T) []string {
 					s, err := strconv.Unquote(lit.Value)
 					require.NoError(t, err)
 					if strings.HasPrefix(s, "-- name: ") {
-						out = append(out, strings.ReplaceAll(s, "/*SLICE:ids*/", "$1,$2"))
+						out = append(out, s)
 					}
 				}
 			}

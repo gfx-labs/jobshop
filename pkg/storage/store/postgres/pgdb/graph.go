@@ -2,8 +2,6 @@ package pgdb
 
 import (
 	"context"
-	"strconv"
-	"strings"
 )
 
 const blockingPathExists = `-- name: BlockingPathExists :one
@@ -176,25 +174,18 @@ func (q *Queries) InsertLabel(ctx context.Context, arg InsertLabelParams) (int64
 
 const labelsFor = `-- name: LabelsFor :many
 SELECT ticket_id, label FROM labels
-WHERE ticket_id IN (/*SLICE:ids*/)
+WHERE ticket_id = ANY($1::text[])
 ORDER BY ticket_id, label
 `
 
-// LabelsFor runs the LabelsFor query.
+// LabelsFor runs the LabelsFor query. The ids go in as one array
+// parameter, so the statement text does not change with the list length
+// and a long list stays under Postgres's 65535 parameter limit (#1366).
 func (q *Queries) LabelsFor(ctx context.Context, ids []string) ([]Label, error) {
-	query := labelsFor
-	var queryParams []interface{}
-	if len(ids) > 0 {
-		ph := make([]string, len(ids))
-		for i, v := range ids {
-			queryParams = append(queryParams, v)
-			ph[i] = "$" + strconv.Itoa(i+1)
-		}
-		query = strings.Replace(query, "/*SLICE:ids*/", strings.Join(ph, ","), 1)
-	} else {
-		query = strings.Replace(query, "/*SLICE:ids*/", "NULL", 1)
+	if len(ids) == 0 {
+		return []Label{}, nil
 	}
-	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	rows, err := q.db.QueryContext(ctx, labelsFor, ids)
 	if err != nil {
 		return nil, err
 	}
