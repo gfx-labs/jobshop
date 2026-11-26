@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.60](https://github.com/gfx-labs/jobshop/compare/v0.10.59...v0.10.60) (2026-11-26)
+
+
+### Bug fixes
+
+* **notes:** dated follow-up lines resolve a Not done item ([#1386](https://github.com/gfx-labs/jobshop/issues/1386)) ([#1390](https://github.com/gfx-labs/jobshop/issues/1390)) ([23f9604](https://github.com/gfx-labs/jobshop/commit/23f96044c9d6020d41f0bc29020964d4dc130bd8))
+
 ## [0.10.59](https://github.com/gfx-labs/jobshop/compare/v0.10.58...v0.10.59) (2026-11-26)
 
 
