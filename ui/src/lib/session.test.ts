@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { SessionEvent } from '../../../packages/jobshop-client/rpc.js';
-import { turnLabel, turnPhase } from './session.ts';
+import { holderSession, isSystemHolder, turnLabel, turnPhase } from './session.ts';
 
 let seq = 0;
 const frame = (type: string, extra: Partial<SessionEvent> = {}): SessionEvent => ({
@@ -58,4 +58,16 @@ test('a tail that starts mid-turn still shows the phase', () => {
 test('a finished turn before the tail does not leak into the next', () => {
   const frames = [frame('turn_start'), frame('text'), frame('turn_end'), frame('turn_start')];
   assert.equal(label(frames), 'thinking…');
+});
+
+test('system holders are not sessions, anything else is', () => {
+  assert.equal(isSystemHolder('controller'), true);
+  assert.equal(isSystemHolder('admin'), true);
+  assert.equal(isSystemHolder('js-s-0039y6n0ww002'), false);
+  assert.equal(isSystemHolder('old-session-without-tag'), false);
+  assert.equal(isSystemHolder(''), false);
+  assert.equal(holderSession('controller'), '');
+  assert.equal(holderSession('admin'), '');
+  assert.equal(holderSession(undefined), '');
+  assert.equal(holderSession('js-s-0039y6n0ww002'), 'js-s-0039y6n0ww002');
 });

@@ -60,7 +60,11 @@ const live = ticket('js-live', 'Review #7', {
 const human = ticket('js-human', 'Question: which base?', { kind: 'task', status: 'open', parent_id: 'js-run', created_at: at(30), labels: ['question'], body: 'Which base branch?' });
 const script = ticket('js-script', 'Merge', { status: 'open', created_at: at(20), fields: { run: 'js-run', step: 'merge', type: 'script', script: 'merge.star:go', retries: 1, failures: 0 }, parent_id: 'js-run' });
 const batch = ticket('js-batch', 'Batch of issues', { kind: 'batch', status: 'open', created_at: at(50), fields: { key: 'b1', issues: ['JOB-1', 'JOB-2'], state: 'running' } });
-const all = [run, dev, live, human, script, batch];
+// Steps the controller completes inline, or an operator holds: the holder is a
+// name, not a session, so there is nothing to watch (JOB-234).
+const auto = ticket('js-auto', 'Route #7', { closed_at: at(59), resolution: 'sonnet', holder: 'controller', parent_id: 'js-run', fields: { run: 'js-run', step: 'route' } });
+const operator = ticket('js-admin', 'Held by admin', { status: 'in_progress', holder: 'admin', parent_id: 'js-run', created_at: at(30) });
+const all = [run, dev, live, human, script, batch, auto, operator];
 
 const timeline = {
   root: 'js-run',
@@ -393,4 +397,21 @@ test('a live update keeps the chosen tab and the scroll position', async ({ page
   expect(await scroller.evaluate((el) => el.scrollTop)).toBe(before);
   await tabs(page).getByRole('tab', { name: 'comments 1' }).click();
   await expect(pane(page).locator('.ticket-comment')).toContainText('late comment');
+});
+
+test('a system holder is plain text, a session holder is a button (JOB-234)', async ({ page }) => {
+  for (const [id, name] of [
+    ['js-auto', 'controller'],
+    ['js-admin', 'admin'],
+  ]) {
+    await open(page, id);
+    await openTab(page, 'details');
+    const holder = facts(page).locator('div').filter({ hasText: /^holder/ });
+    await expect(holder).toContainText(name);
+    await expect(holder.getByRole('button')).toHaveCount(0);
+    await expect(pane(page).locator('button.watch-session')).toHaveCount(0);
+  }
+  await open(page, 'js-live');
+  await openTab(page, 'details');
+  await expect(facts(page).locator('div').filter({ hasText: /^holder/ }).getByRole('button', { name: 'js-s-3' })).toBeVisible();
 });

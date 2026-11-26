@@ -27,6 +27,7 @@ import {
   type KV,
 } from '../lib/detail.ts';
 import { setParams, useDeskRoute } from '../lib/route.ts';
+import { holderSession, isSystemHolder } from '../lib/session.ts';
 import { durationLabel, holderState, liveText, markerKey } from '../lib/timeline.ts';
 import { exactLabel, fullLabel, linkLabel, safeLinks, stepName } from '../lib/trace.ts';
 import { traceAtom } from '../state/live.ts';
@@ -40,7 +41,7 @@ const pickTab = (id: DetailTab) => setParams({ tab: id === 'events' ? '' : id })
 // What the ticket menu acts on: any ticket in this graph can be inspected.
 const menuTarget = (t: { id: string; holder?: string; kind?: string }) => ({
   id: t.id,
-  session: t.holder || (t.kind === 'session' ? t.id : ''),
+  session: holderSession(t.holder) || (t.kind === 'session' ? t.id : ''),
   inspectable: true,
 });
 
@@ -250,9 +251,13 @@ export function TicketDetails({
         )}
         {ticket.holder && (
           <Fact name="holder">
-            <button className="watch-session mono" title={ticket.holder} onClick={() => onWatch(ticket.holder!)}>
-              {ticket.holder}
-            </button>
+            {isSystemHolder(ticket.holder) ? (
+              <span className="mono">{ticket.holder}</span>
+            ) : (
+              <button className="watch-session mono" title={ticket.holder} onClick={() => onWatch(ticket.holder!)}>
+                {ticket.holder}
+              </button>
+            )}
             {liveSummary(row, ticket.holder, holder)}
           </Fact>
         )}
