@@ -147,10 +147,16 @@ func TestScanSessionsSkipsDeadClosed(t *testing.T) {
 	assert.Equal(t, 1, total(), "only the ticketless dir is probed once the live host is cached dead")
 }
 
-// readCounter counts the store reads of a scan: Get and List calls.
+// readCounter counts the store reads of a scan: Get, List and
+// ClosedSessions calls.
 type readCounter struct {
 	store.Store
-	gets, lists atomic.Int64
+	gets, lists, closedReads atomic.Int64
+}
+
+func (r *readCounter) ClosedSessions(ctx context.Context) ([]store.ClosedSession, error) {
+	r.closedReads.Add(1)
+	return r.Store.ClosedSessions(ctx)
 }
 
 func (r *readCounter) Get(ctx context.Context, id string) (domain.Ticket, error) {
@@ -206,7 +212,7 @@ func TestScanSessionsFirstScanReadsOnce(t *testing.T) {
 	g2, l2 := walkReads(t, 90)
 	assert.Zero(t, g1, "walk of 20 directories: before #1345 this was 20 Gets")
 	assert.Zero(t, g2, "walk of 90 directories: before #1345 this was 90 Gets")
-	assert.Equal(t, int64(2), l1, "list_open and list_closed")
+	assert.Equal(t, int64(1), l1, "list_open only: the closed read is ClosedSessions, not a List of tickets (#1361)")
 	assert.Equal(t, l1, l2, "list calls do not grow with the directory count")
 
 	t.Run("steady state", func(t *testing.T) {
@@ -235,8 +241,61 @@ func TestScanSessionsFirstScanReadsOnce(t *testing.T) {
 		gets0, lists0 := rc.gets.Load(), rc.lists.Load()
 		c.scanSessions(ctx)
 		assert.Equal(t, int64(3), rc.gets.Load()-gets0, "one Get per new directory")
-		assert.Equal(t, int64(1), rc.lists.Load()-lists0, "only list_open: no closed List once Ended is filled")
+		assert.Equal(t, int64(1), rc.lists.Load()-lists0, "only list_open")
+		assert.Equal(t, int64(1), rc.closedReads.Load(), "ClosedSessions ran on the first scan only")
 	})
+}
+
+// TestScanSessionsBackfillEnded (#1361): the first scan fills Ended on a
+// closed session without it, leaves one that has it, leaves one whose
+// host still runs, and ignores open sessions; a later scan reads no
+// closed sessions. The closed read is ids and an ended flag, so this pins
+// that the flag matches fields.ended.
+func TestScanSessionsBackfillEnded(t *testing.T) {
+	t.Parallel()
+	var log lockedBuf
+	c, _, _ := offTickController(t, quietYAML, &log)
+	c.ctx = t.Context()
+	ctx := t.Context()
+	rc := &readCounter{Store: c.store}
+	c.store = rc
+	mk := func(fields string, closeIt bool) string {
+		t.Helper()
+		s := mkTicket(t, c, store.NewTicket{Kind: domain.KindSession, Pool: "dev", Fields: json.RawMessage(fields)})
+		require.NoError(t, os.MkdirAll(c.root.SessionDir(s.ID), 0o700))
+		if closeIt {
+			_, err := store.Close(ctx, c.store, "controller", s.ID, nil, "done")
+			require.NoError(t, err)
+		}
+		return s.ID
+	}
+	filled := mk(`{"agent":"fake","ended":{"host_pid":99}}`, true)
+	bare := mk(`{"agent":"fake"}`, true)
+	running := mk(`{"agent":"fake"}`, true)
+	open := mk(`{"agent":"fake"}`, false)
+	c.hostAlive = func(dir string) bool { return dir == c.root.SessionDir(running) }
+
+	ended := func(id string) *domain.SessionEnded {
+		t.Helper()
+		tk, err := c.store.Get(ctx, id)
+		require.NoError(t, err)
+		f, err := domain.DecodeFields[domain.SessionFields](tk)
+		require.NoError(t, err)
+		return f.Ended
+	}
+	c.scanSessions(ctx)
+	require.True(t, c.endedFilled)
+	if e := ended(filled); assert.NotNil(t, e) {
+		assert.Equal(t, 99, e.HostPid, "an existing Ended is not rewritten")
+	}
+	assert.NotNil(t, ended(bare), "a closed session without Ended is filled")
+	assert.Nil(t, ended(running), "a running host is filled once it is reaped")
+	assert.Nil(t, ended(open), "an open session is not touched")
+	assert.Equal(t, []string{running}, c.scannedOrphans(ctx, nil))
+	assert.Equal(t, int64(1), rc.closedReads.Load())
+
+	c.scanSessions(ctx)
+	assert.Equal(t, int64(1), rc.closedReads.Load(), "no closed read once Ended is filled")
 }
 
 // TestScanSessionsParallelProbe (#1354): a walk with many directories to

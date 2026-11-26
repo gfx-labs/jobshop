@@ -3,7 +3,6 @@ package control
 import (
 	"context"
 	"errors"
-	"math"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -140,33 +139,33 @@ const directClosedGets = 8
 // closedSessions tells whether a session directory's ticket is closed. A
 // directory with no ticket, or a ticket in another state, is not: its host
 // may not have started yet, so it is probed again next scan. Past
-// directClosedGets lookups it answers from one List of the closed session
-// tickets, which scanSessions loads first when backfillEnded needs them
-// anyway (first-scan cost, #1345). One walk owns it; not safe for
-// concurrent use.
+// directClosedGets lookups it answers from one ClosedSessions read, which
+// scanSessions loads first when backfillEnded needs it anyway (first-scan
+// cost, #1345). That read is ids and an ended flag, not whole tickets
+// (#1361). One walk owns it; not safe for concurrent use.
 type closedSessions struct {
-	c       *Controller
-	tickets []domain.Ticket
-	ids     map[string]bool
-	loaded  bool
-	gets    int
+	c      *Controller
+	list   []store.ClosedSession
+	ids    map[string]bool
+	loaded bool
+	gets   int
 }
 
 func (c *Controller) newClosedSessions() *closedSessions { return &closedSessions{c: c} }
 
-// load reads every closed session ticket once.
+// load reads every closed session once.
 func (s *closedSessions) load(ctx context.Context) error {
 	if s.loaded {
 		return nil
 	}
-	closed, err := s.c.store.List(ctx, store.Filter{Kind: domain.KindSession, Status: domain.StatusClosed, Limit: math.MaxInt32})
+	closed, err := s.c.store.ClosedSessions(ctx)
 	if err != nil {
 		return err
 	}
-	s.tickets, s.loaded = closed, true
+	s.list, s.loaded = closed, true
 	s.ids = make(map[string]bool, len(closed))
-	for _, t := range closed {
-		s.ids[t.ID] = true
+	for _, cs := range closed {
+		s.ids[cs.ID] = true
 	}
 	return nil
 }

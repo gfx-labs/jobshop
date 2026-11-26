@@ -238,6 +238,13 @@ type Filter struct {
 // TimeRange is [Since, Until); a zero end is open.
 type TimeRange struct{ Since, Until time.Time }
 
+// ClosedSession is a closed session ticket reduced to what scan_sessions
+// needs: the id, and whether fields.ended (the saved host state) is set.
+type ClosedSession struct {
+	ID    string
+	Ended bool
+}
+
 // Order is a List order.
 type Order string
 
@@ -343,6 +350,12 @@ type Store interface {
 	// in pools (any pool when empty): the run count of the memory-edit
 	// gate, without loading the steps (JOB-191).
 	CountRuns(ctx context.Context, pools []string, r TimeRange) (int, error)
+
+	// ClosedSessions lists every closed session ticket's id and whether
+	// its fields.ended is set, ordered by id, without reading whole
+	// tickets or their labels (#1361). scan_sessions reads it once per
+	// start, thousands of rows.
+	ClosedSessions(ctx context.Context) ([]ClosedSession, error)
 
 	// Maintain refreshes what the backend's planner needs to pick
 	// indexes (SQLite statistics, JOB-191). It is cheap when nothing

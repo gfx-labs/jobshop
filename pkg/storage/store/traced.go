@@ -166,6 +166,13 @@ func (t *tracedStore) Apply(ctx context.Context, actor string, g Graph) ([]domai
 	return r, err
 }
 
+func (t *tracedStore) ClosedSessions(ctx context.Context) ([]ClosedSession, error) {
+	start := time.Now()
+	r, err := t.Store.ClosedSessions(ctx)
+	slow(ctx, "closed_sessions", "", start, err)
+	return r, err
+}
+
 func (t *tracedStore) Recall(ctx context.Context, q RecallQuery) ([]RecallHit, error) {
 	start := time.Now()
 	r, err := t.Store.Recall(ctx, q)

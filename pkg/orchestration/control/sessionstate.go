@@ -132,7 +132,7 @@ func (c *Controller) scanSessions(ctx context.Context) {
 	c.sessScanned = true
 	c.sessScanMu.Unlock()
 	if !done && listErr == nil {
-		c.backfillEnded(ctx, orphans, closed.tickets, &tm, mark)
+		c.backfillEnded(ctx, orphans, closed.list, &tm, mark)
 	}
 }
 
@@ -162,16 +162,12 @@ func (c *Controller) scanMark() func(d *time.Duration, name string) {
 
 // backfillEnded fills Ended on up to endedBackfillBatch closed sessions
 // per pass, until none is left.
-func (c *Controller) backfillEnded(ctx context.Context, orphans []string, closed []domain.Ticket, tm *scanTimes, mark func(*time.Duration, string)) {
+func (c *Controller) backfillEnded(ctx context.Context, orphans []string, closed []store.ClosedSession, tm *scanTimes, mark func(*time.Duration, string)) {
 	defer mark(&tm.Backfill, "backfill")
 	n := 0
-	for _, t := range closed {
-		if slices.Contains(orphans, t.ID) {
+	for _, cs := range closed {
+		if cs.Ended || slices.Contains(orphans, cs.ID) {
 			continue // host still running: filled once it is reaped
-		}
-		f, err := domain.DecodeFields[domain.SessionFields](t)
-		if err != nil || f.Ended != nil {
-			continue
 		}
 		if n == endedBackfillBatch {
 			return
@@ -179,9 +175,9 @@ func (c *Controller) backfillEnded(ctx context.Context, orphans []string, closed
 		n++
 		tm.Filled++
 		start := c.now()
-		c.saveEnded(ctx, t.ID)
+		c.saveEnded(ctx, cs.ID)
 		if took := c.since(start); took > tm.SlowestEnded {
-			tm.SlowestEnded, tm.SlowestEndedID = took, t.ID
+			tm.SlowestEnded, tm.SlowestEndedID = took, cs.ID
 		}
 	}
 	c.sessScanMu.Lock()
