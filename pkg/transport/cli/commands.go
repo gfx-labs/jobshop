@@ -22,6 +22,7 @@ import (
 	packpkg "github.com/gfx-labs/jobshop/pkg/pack"
 	"github.com/gfx-labs/jobshop/pkg/support/telemetry"
 	"github.com/gfx-labs/jobshop/pkg/tooling/flaky"
+	"github.com/gfx-labs/jobshop/pkg/tooling/notes"
 	"github.com/gfx-labs/jobshop/pkg/transport/rpc"
 
 	"github.com/gfx-labs/jobshop/pkg/domain"
@@ -1076,6 +1077,7 @@ func (c sessionNewCmd) Run(g *Globals) error {
 type reportCmd struct {
 	Incidents  reportIncidentsCmd  `cmd:"" help:"Group controller WARN/ERROR lines, crashed or stuck sessions and failed run steps."`
 	CIFailures reportCIFailuresCmd `cmd:"" name:"ci-failures" help:"Group failing tests from the failed-tests artifact of recent failed CI runs, with flaky/broken counts, and list failed jobs and runs that passed on rerun, on master and PR branches (runs gh)."`
+	Notes      reportNotesCmd      `cmd:"" help:"List 'Not done' and 'Not built' lines in docs/notes, marking those a later line of the note probably resolved (reads files only)."`
 
 	// Worker reports on the held ticket (#186).
 	Progress reportProgressCmd `cmd:"" help:"Report progress on your ticket."`
@@ -1114,6 +1116,23 @@ func (c reportCIFailuresCmd) Run() error {
 }
 
 type attentionCmd struct{}
+
+type reportNotesCmd struct {
+	Dir  string `default:"docs/notes" help:"Notes directory."`
+	JSON bool   `name:"json" help:"Print the report as JSON."`
+}
+
+// Run reads the notes directory directly: no controller, network or store.
+func (c reportNotesCmd) Run() error {
+	rep, err := notes.Scan(c.Dir)
+	if err != nil {
+		return err
+	}
+	if c.JSON {
+		return printOut(rep)
+	}
+	return rep.Text(stdout)
+}
 
 func (attentionCmd) Run(g *Globals) error { return g.call(rpc.MethodAttention, nil, nil) }
 

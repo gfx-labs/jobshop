@@ -252,7 +252,7 @@ func onlyRules() []Only {
 			From: []string{
 				"./pkg/support/clock", "./pkg/config/cron", "./pkg/support/logctx", "./pkg/support/redact", "./pkg/pack/tmpl",
 				"./pkg/knowledge/memory", "./pkg/pack/cue", "./pkg/ids", "./pkg/integrations/apicall",
-				"./pkg/tooling/runbook", "./pkg/tooling/flaky",
+				"./pkg/tooling/runbook", "./pkg/tooling/flaky", "./pkg/tooling/notes",
 			},
 			Std:   true,
 			Third: true,

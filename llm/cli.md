@@ -283,6 +283,10 @@ Commands:
     with flaky/broken counts, and list failed jobs and runs that passed on
     rerun, on master and PR branches (runs gh).
 
+  report notes [flags]
+    List 'Not done' and 'Not built' lines in docs/notes, marking those a later
+    line of the note probably resolved (reads files only).
+
   report progress [<note>] [flags]
     Report progress on your ticket.
 
@@ -2801,6 +2805,10 @@ Commands:
     with flaky/broken counts, and list failed jobs and runs that passed on
     rerun, on master and PR branches (runs gh).
 
+  report notes [flags]
+    List 'Not done' and 'Not built' lines in docs/notes, marking those a later
+    line of the note probably resolved (reads files only).
+
   report progress [<note>] [flags]
     Report progress on your ticket.
 
@@ -2866,6 +2874,28 @@ Flags:
       --limit=5            How many recent failed runs to read.
       --rerun-limit=5      How many recent completed runs, any branch, to scan
                            for reruns.
+```
+
+## jobshop report notes
+
+```
+Usage: jobshop report notes [flags]
+
+List 'Not done' and 'Not built' lines in docs/notes, marking those a later line
+of the note probably resolved (reads files only).
+
+Flags:
+  -h, --help                Show context-sensitive help.
+      --root=STRING         Jobshop root directory (holds jobshop.yaml,
+                            the database, sockets and sessions). Default:
+                            nearest ancestor of the cwd containing jobshop.yaml
+                            ($JOBSHOP_ROOT).
+      --socket=STRING       Socket to talk to. Defaults to the session
+                            CLI socket, else the root's admin socket
+                            ($JOBSHOP_SOCKET).
+
+      --dir="docs/notes"    Notes directory.
+      --json                Print the report as JSON.
 ```
 
 ## jobshop report progress
