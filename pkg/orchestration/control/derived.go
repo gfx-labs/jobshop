@@ -112,6 +112,13 @@ func (c *Controller) settleEscalations(ctx context.Context, runID string) {
 // the holder may be working it. A repeat of the same comment is skipped,
 // so the sweep does not pile them up.
 func (c *Controller) closeDerived(ctx context.Context, t domain.Ticket, resolution, why string, final bool) {
+	if !final {
+		// t came from a list taken before the caller read the run; a
+		// claim made since must not be closed under its holder (#1392).
+		if cur, err := c.store.Get(ctx, t.ID); err == nil {
+			t = cur
+		}
+	}
 	if t.Status == domain.StatusClosed {
 		return
 	}
