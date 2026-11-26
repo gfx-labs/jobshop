@@ -27,4 +27,8 @@ swapped out without an operator choosing it. A callback run is only
 closed by its `finish_run` action, so a run whose steps are all done but
 whose final callback could not run still needs one `--repin` resume.
 
+2026-11-26: reversed in JOB-188 (#1161), see `JOB-188-unpinned-callbacks.md`:
+a callback run now follows the live callbacks by default, and
+`pin_callbacks: true` opts a workflow into the pinning described here.
+
 Test: `TestHookRunResumeRepin` (pkg/control/automation_test.go).

@@ -28,4 +28,8 @@ run in another with the existing `jobshop edge add <implement step>
 Not built here: shared pools keyed by repo, one planner across repos,
 and the live check with a second throwaway repo.
 
+2026-11-26: shared pools keyed by repo and one planner across repos were
+built in JOB-207 (#1239), see `JOB-207-shared-pools.md`. The live check with
+a second throwaway repo is not recorded in either note.
+
 Test: `TestGithubPackTwoRepos`.
