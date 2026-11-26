@@ -1,6 +1,6 @@
 # "PR unavailable" apart from "no PR yet" (#1294, 2026-11-19)
 
-Follows `JOB-131-inflight-pr-links.md` ("Not done").
+Follows `JOB-131-inflight-pr-links.md` ("Not done"). <!-- notes:ignore -->
 
 `run.show` now returns `pr_state` on the run result (`rpc.RunResult.PRState`),
 next to `links`. It is per run, because Desk's in-flight row is per run.

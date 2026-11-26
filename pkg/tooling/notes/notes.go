@@ -43,7 +43,14 @@ var (
 	ownIssue = regexp.MustCompile(`^(?:JOB-)?(\d+)-`)
 	heading  = regexp.MustCompile(`^(#+)\s`)
 	listItem = regexp.MustCompile(`^\s*(?:[-*+]|\d+[.)])\s`)
+	// dated starts a follow-up line ("2026-11-04: built in ..."), which the
+	// notes write straight under the item they update.
+	dated = regexp.MustCompile(`^\s*\d{4}-\d{2}-\d{2}\b`)
 )
+
+// ignoreMark on a finding's own line drops it from the report, for a line
+// that only talks about "not done" (a note describing this report).
+const ignoreMark = "notes:ignore"
 
 // Scan reads every .md file directly in dir.
 func Scan(dir string) (Report, error) {
@@ -98,7 +105,7 @@ func scanFile(name string, lines []string) []Finding {
 	}
 	var out []Finding
 	for i := 0; i < len(lines); i++ {
-		if !notDone.MatchString(lines[i]) {
+		if !notDone.MatchString(lines[i]) || strings.Contains(lines[i], ignoreMark) {
 			continue
 		}
 		f := Finding{File: name, Line: i + 1, Text: strings.TrimSpace(lines[i])}
@@ -118,8 +125,8 @@ func scanFile(name string, lines []string) []Finding {
 // belongs to, so the wrapped rest of a "Not done" paragraph or list item,
 // or the list under a "Not done" heading, does not count as a later line.
 // A heading's section runs to the next heading of the same or a higher
-// level; any other line's block runs to a blank line, a heading or, for a
-// list item, the next item.
+// level; any other line's block runs to a blank line, a heading, a dated
+// follow-up line or, for a list item, the next item.
 func blockEnd(lines []string, i int) int {
 	if m := heading.FindStringSubmatch(lines[i]); m != nil {
 		level := len(m[1])
@@ -133,7 +140,7 @@ func blockEnd(lines []string, i int) int {
 	item := listItem.MatchString(lines[i])
 	for j := i + 1; j < len(lines); j++ {
 		l := lines[j]
-		if strings.TrimSpace(l) == "" || heading.MatchString(l) || (item && listItem.MatchString(l)) {
+		if strings.TrimSpace(l) == "" || heading.MatchString(l) || dated.MatchString(l) || (item && listItem.MatchString(l)) {
 			return j
 		}
 	}
