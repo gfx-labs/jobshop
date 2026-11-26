@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -66,7 +67,9 @@ func capability(name string, call api.Call) *starlark.Builtin {
 		if options.Replay != nil {
 			cached, found, err := options.Replay(inv.ctx, observation)
 			if err != nil {
-				return nil, errors.New("capability recorded-result lookup failed: reconcile the recorded outcome before retrying")
+				// The cause is in the message so the host's failure log and
+				// the invocation record show why the lookup failed.
+				return nil, fmt.Errorf("capability recorded-result lookup failed: %w: reconcile the recorded outcome before retrying", err)
 			}
 			if found {
 				return inv.restore(name, cached, args, kwargs)

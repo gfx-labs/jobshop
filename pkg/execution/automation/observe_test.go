@@ -260,3 +260,29 @@ func TestKnownSecretsAreAbsentFromHookDiagnostics(t *testing.T) {
 		t.Fatal("known secret escaped observation boundary")
 	}
 }
+
+// The replay error reaches the invocation error, so a failed hook's log says
+// why the lookup failed (#1380).
+func TestReplayErrorCauseInInvokeError(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		requests.Add(1)
+	}))
+	defer server.Close()
+	engine := hook(t, `def handle(url):
+    return http.get(url).status
+`, automation.Options{
+		AllowHTTP: true,
+		Observe:   func(context.Context, automation.Observation) error { return nil },
+		Replay: func(context.Context, automation.Observation) (any, bool, error) {
+			return nil, false, errors.New("store is not ready")
+		},
+	})
+	_, err := engine.Invoke(t.Context(), "main.star:handle", server.URL)
+	if err == nil || !strings.Contains(err.Error(), "recorded-result lookup failed") || !strings.Contains(err.Error(), "store is not ready") {
+		t.Fatalf("error does not name the replay cause: %v", err)
+	}
+	if requests.Load() != 0 {
+		t.Fatal("the call ran after the lookup failed")
+	}
+}
