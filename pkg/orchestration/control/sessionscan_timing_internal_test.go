@@ -178,3 +178,8 @@ func TestScanTimingHarnessFixture(t *testing.T) {
 	assert.Contains(t, lines[3], "backfill=-")
 	assert.Contains(t, lines[2], "List ")
 }
+
+func (s *timedStore) ClosedSessions(ctx context.Context) ([]store.ClosedSession, error) {
+	defer s.note("ClosedSessions", time.Now())
+	return s.Store.ClosedSessions(ctx)
+}
