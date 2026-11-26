@@ -97,9 +97,16 @@ func fileBacked(path string) bool {
 	return path != "" && path != ":memory:" && !strings.HasPrefix(path, "file:")
 }
 
+// readerCacheKiB is each reader connection's page cache limit. SQLite also
+// sizes the ORDER BY sorter's in-memory run by it: at the 2 MiB default a
+// list of a few thousand wide rows (closed sessions, steps) spilled the sort
+// to temp files, 12-30 ms of a 60-80 ms List (#1372). The cache fills only
+// as pages are read, so the worst case is readConns times this.
+const readerCacheKiB = 16384
+
 // openReader opens query-only connections to the database at path.
 func openReader(path string) (*sql.DB, error) {
-	dsn := "file:" + path + "?_pragma=busy_timeout(5000)&_pragma=query_only(1)"
+	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)&_pragma=query_only(1)&_pragma=cache_size(-%d)", path, readerCacheKiB)
 	rdb, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
