@@ -107,3 +107,18 @@ What this does not show:
 The 7.3s tick at 10:00:33 UTC (every store call at about 90ms or a multiple)
 is not explained by these changes. Do not call it fixed until a tick with that
 pattern is traced again.
+
+2026-11-26 (#1374). Still open. Evidence: JOB-212, JOB-221, #1338 and the
+quiet-tick notes (#1293, #1305, #1318, last read 2026-11-19); the 2026-11-10
+journal is not readable from an agent session, so the tick itself was not
+re-read. The known slow ticks do not have its pattern. `scan_sessions`
+(JOB-212/221) was file I/O in one step, so other steps waited behind it and
+reader-pool calls were not slowed. The 43s `(*collection).Put` hold (#1338)
+was a writer hold, which does not touch reader-pool calls either. The 10:00:33
+tick had a 4ms reader-pool list at about 90ms too, which fits a stalled
+process (CFS throttling or CPU starvation) and neither of those. That is a
+reading, not a finding: no trace of that tick exists. The `slow tick` fields
+would settle it if it recurs: `stalls`, `stall_max_seconds`, `throttled_seconds`
+and `psi_cpu_seconds` high with hint `process_stalled` means the process
+stalled; `writer_queue` or `db_file_written` without it means the database.
+It has not recurred in the windows read so far.
