@@ -1,4 +1,5 @@
 import type { Ticket, RunResult } from '../../../packages/jobshop-client/rpc.js';
+import { holderSession } from './session.ts';
 
 export function ago(value?: string, now = Date.now()) {
   if (!value || value.startsWith('0001')) return 'unknown';
@@ -98,7 +99,7 @@ export function flights(runs: RunResult[], threshold = 3 * 3600000, now = Date.n
       waiting,
       since,
       source,
-      holder: step?.holder || '',
+      holder: holderSession(step?.holder),
       state: f.state || 'running',
       stepTicket: step,
       stalled: f.state !== 'needs_human' && (old || repeated || mismatch),

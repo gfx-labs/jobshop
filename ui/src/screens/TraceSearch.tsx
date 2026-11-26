@@ -3,6 +3,7 @@ import type { Ticket } from '../../../packages/jobshop-client/rpc.js';
 import { TitleAction } from '../components/TitleAction.tsx';
 import { ticketMenuRef, TicketMenuButton } from '../components/TicketMenu.tsx';
 import { client } from '../lib/api.ts';
+import { holderSession } from '../lib/session.ts';
 import { state as ticketState, statusLetter } from '../lib/trace.ts';
 
 const pageSize = 50;
@@ -146,7 +147,7 @@ export function TraceSearch({ reference, onOpen }: { reference: string; onOpen: 
                       key={ticket.id}
                       ref={ticketMenuRef({
                         id: ticket.id,
-                        session: ticket.holder || (ticket.kind === 'session' ? ticket.id : ''),
+                        session: holderSession(ticket.holder) || (ticket.kind === 'session' ? ticket.id : ''),
                       })}
                     >
                       <td
@@ -168,7 +169,7 @@ export function TraceSearch({ reference, onOpen }: { reference: string; onOpen: 
                         <TicketMenuButton
                           target={{
                             id: ticket.id,
-                            session: ticket.holder || (ticket.kind === 'session' ? ticket.id : ''),
+                            session: holderSession(ticket.holder) || (ticket.kind === 'session' ? ticket.id : ''),
                           }}
                         />
                       </td>

@@ -10,6 +10,7 @@ import type {
 } from '../../../packages/jobshop-client/rpc.js';
 import { eventItems, historyPartial, type EventItem } from '../lib/detail.ts';
 import { durationLabel, holderState, isWorkflowSpan, segmentEnd, segmentText, turnTotals } from '../lib/timeline.ts';
+import { holderSession } from '../lib/session.ts';
 import { exactLabel, fullLabel, linkLabel } from '../lib/trace.ts';
 import { TicketHistory } from './TicketHistory.tsx';
 
@@ -184,7 +185,7 @@ function Entry({
             {open ? ' so far' : ''}
             {item.ended ? ' · ended: ' + item.ended : ''}
           </p>
-          {s.actor && (
+          {holderSession(s.actor) && (
             <p className="event-links">
               <button title={s.actor} onClick={() => onWatch(s.actor!)}>
                 view session ↗

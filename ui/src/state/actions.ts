@@ -9,6 +9,7 @@ import {
   type View,
 } from '../lib/route.ts';
 import { client } from '../lib/api.ts';
+import { holderSession } from '../lib/session.ts';
 import { errorAtom, selectedAtom, traceAtom } from './live.ts';
 import { store } from './store.ts';
 import { noticeAtom } from './ticketMenu.ts';
@@ -152,7 +153,7 @@ export function openTrace(ref: string) {
 export function inspect(id: string) {
   const trace = store.get(traceAtom);
   const node = trace?.graph?.nodes.find((n) => n.id === id);
-  store.set(watchedSessionAtom, node?.holder || (node?.kind === 'session' ? id : ''));
+  store.set(watchedSessionAtom, holderSession(node?.holder) || (node?.kind === 'session' ? id : ''));
   if (currentRoute().inspect === id || (!currentRoute().inspect && store.get(selectedAtom)?.id === id)) return;
   // The row or card is selected at once. The graph and the timeline stay: the
   // stream reopens for the details and sends the same graph again.

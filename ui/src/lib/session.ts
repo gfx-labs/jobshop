@@ -51,3 +51,14 @@ export function turnPhase(frames: SessionEvent[], busy = false): TurnPhase | nul
 export function turnLabel(phase: TurnPhase) {
   return phase.kind === 'tool' ? 'running: ' + phase.title : phase.kind + '…';
 }
+
+// The controller and Desk operators hold tickets under these names (a step
+// the controller completes inline records "controller"). They are not
+// sessions, so there is nothing to watch. Ids of old sessions carry no tag,
+// so a denylist, not the id shape, tells them apart.
+const systemHolders = new Set(['controller', 'admin']);
+
+export const isSystemHolder = (holder?: string) => !!holder && systemHolders.has(holder);
+
+// The session a holder names, or '' when it is empty or a system holder.
+export const holderSession = (holder?: string) => (holder && !isSystemHolder(holder) ? holder : '');
