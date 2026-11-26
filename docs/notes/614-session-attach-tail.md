@@ -19,3 +19,5 @@ seq, and `session.list` decoded every journal line of every session.
   2026-11-05: partly, held tickets load once in `session.list` (#741);
   closed sessions list from saved state (#747, `JOB-32-session-state.md`).
   `sessionInfo` itself is not batched.
+  2026-11-26: measured in #1373 (`1373-session-list-all.md`): about
+  100 ms warm, 150 to 190 ms cold for 5105 sessions. Not batching.
