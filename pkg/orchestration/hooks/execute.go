@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -65,11 +66,19 @@ func observeHookCall(ctx context.Context, observation automation.Observation) er
 		if err != nil {
 			return err
 		}
-		_, created, err := col.Put(ctx, store.Record{Key: key, State: "UNKNOWN", Value: data})
+		prior, created, err := col.Put(ctx, store.Record{Key: key, State: "UNKNOWN", Value: data})
 		if err != nil {
 			return err
 		}
 		if !created {
+			// A read an earlier attempt started and never finished (a
+			// restart killed it) has no effect to reconcile: record this
+			// attempt over it.
+			if repeatable(observation.Capability) && prior.State != "completed" {
+				prior.Value, prior.State = data, "UNKNOWN"
+				_, err = col.Update(ctx, prior)
+				return err
+			}
 			return errors.New("capability already observed: reconcile the recorded external outcome before retrying")
 		}
 		return nil
@@ -118,6 +127,18 @@ func (c *Engine) hookCallData(call hookCallRecord, key string) ([]byte, error) {
 	return json.Marshal(call)
 }
 
+// repeatable reports whether a capability only reads, so a call that was
+// started and never recorded as finished may run again without
+// reconciliation. http.get is not listed: an arbitrary URL may have effects
+// (TestHookInterruptedExternalCallRemainsUnknownAcrossRestart).
+func repeatable(capability string) bool {
+	switch capability {
+	case "github.get", "tickets", "runs", "sessions":
+		return true
+	}
+	return false
+}
+
 func replayHookCall(ctx context.Context, observation automation.Observation) (any, bool, error) {
 	trace, ok := ctx.Value(hookCallContextKey{}).(hookCallContext)
 	if !ok {
@@ -140,7 +161,12 @@ func replayHookCall(ctx context.Context, observation automation.Observation) (an
 		return nil, false, err
 	}
 	if rec.State != "completed" {
-		return nil, false, errors.New("recorded external outcome is unknown or failed")
+		// A restart between a read's start and its result leaves it unknown.
+		// Asking again changes nothing outside, so run it (#1380).
+		if repeatable(observation.Capability) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("recorded external outcome is %s: it is unknown or failed", rec.State)
 	}
 	if call.Artifact != "" {
 		file, err := os.Open(call.Artifact)
