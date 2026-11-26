@@ -81,4 +81,6 @@ checks the reader's cache size.
   into strings and `json.RawMessage`. Cutting it needs lazy `fields`/`meta`
   decoding in the `domain.Ticket` API, which is a larger change than this
   issue's scan.
-- Cold-cache `List` was not measured.
+- Cold-cache `List` was not measured. Measured 2026-11-26 (#1382,
+  1382-cold-first-tick.md): cold 290-360 ms against 45-55 ms warm for closed
+  sessions, tick 1 under 0.6 s cold.
