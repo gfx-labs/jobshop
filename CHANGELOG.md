@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.61](https://github.com/gfx-labs/jobshop/compare/v0.10.60...v0.10.61) (2026-11-26)
+
+
+### Bug fixes
+
+* **control:** re-read a derived ticket before closing it so a held escalation stays open ([#1392](https://github.com/gfx-labs/jobshop/issues/1392)) ([#1393](https://github.com/gfx-labs/jobshop/issues/1393)) ([2867997](https://github.com/gfx-labs/jobshop/commit/2867997ed7398bd4031ac64edc8fb7154ca0cd4a))
+
 ## [0.10.60](https://github.com/gfx-labs/jobshop/compare/v0.10.59...v0.10.60) (2026-11-26)
 
 
