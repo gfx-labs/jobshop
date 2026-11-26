@@ -122,3 +122,32 @@ func TestReportText(t *testing.T) {
 	assert.Contains(t, out, "101-resolved.md:3: probably resolved (line 5: built in): Not built yet: the cache.\n")
 	assert.Contains(t, out, "8 notes read, 8 lines, 4 open, 4 probably resolved\n")
 }
+
+// TestScanDatedFollowUp: a dated line written straight under an item (a
+// list continuation, or the next line of a paragraph) is a later line, and
+// a wrapped line that is not dated stays the item's own text (#1386).
+func TestScanDatedFollowUp(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	files := map[string]string{
+		"200-list.md": "- Not built yet (#316): the install dir,\n  wrapped (#317).\n  2026-11-04: built in #316.\n- Not done: other.\n",
+		"201-para.md": "Not done: a state.\n2026-11-19: built in #1294.\n",
+		"202-open.md": "- Not done: the walk.\n  2026-11-20: measured, not changing it.\n",
+		"203-skip.md": "Not done: a report line. <!-- notes:ignore -->\n",
+	}
+	for name, body := range files {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600))
+	}
+	rep, err := Scan(dir)
+	require.NoError(t, err)
+	got := map[string]Finding{}
+	for _, f := range rep.Findings {
+		got[f.File+":"+string(rune('0'+f.Line))] = f
+	}
+	require.Len(t, rep.Findings, 4, "the ignored line is not reported")
+	assert.True(t, got["200-list.md:1"].Resolved)
+	assert.Equal(t, 3, got["200-list.md:1"].ResolvedLine, "the wrapped #317 is own text, the dated line resolves")
+	assert.False(t, got["200-list.md:4"].Resolved)
+	assert.True(t, got["201-para.md:1"].Resolved)
+	assert.False(t, got["202-open.md:1"].Resolved, "a dated line that cites nothing built leaves it open")
+}

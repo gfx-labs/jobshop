@@ -1,4 +1,4 @@
-# report notes: stale "Not done" lines
+# report notes: stale "Not done" lines <!-- notes:ignore -->
 
 2026-11-25, #1362 (part of #1359).
 
@@ -17,8 +17,8 @@ It reads files only: no controller, network or store. Logic is in
 ## What it lists
 
 Every line of a `*.md` file directly in the directory that contains
-`not done` or `not built`, in any case: prose, list items and headings
-(`## Not done`). Each has file, line and text, sorted by file then line.
+`not done` or `not built`, in any case: prose, list items and headings <!-- notes:ignore -->
+(`## Not done`). Each has file, line and text, sorted by file then line. <!-- notes:ignore -->
 Plain text is `file:line: open|probably resolved (...): text` and a count
 line; `--json` is the `notes.Report` struct (`probably_resolved`,
 `resolved_line`, `resolved_by` per finding).
@@ -33,7 +33,7 @@ without one has none. So a note that cites only its own issue stays open.
 The finding's own text is not a later line: for a heading it is the section
 up to the next heading of the same or a higher level, otherwise the lines
 up to a blank line, a heading or (for a list item) the next item. This keeps
-`Not done: x (see #12)` and the list under `## Not done` from resolving
+`Not done: x (see #12)` and the list under `## Not done` from resolving <!-- notes:ignore -->
 themselves.
 
 It is a heuristic. A later line that cites an unrelated PR marks a finding

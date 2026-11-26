@@ -5,7 +5,7 @@ only `id`, `state`, `workflow`, `key`, `title` and `resolution`, in the same
 newest-first order. The default output is unchanged (full tickets, about
 7 KB per run because of `fields.inputs`).
 
-`-s open` (rpc `RunListParams.State = "open"`) lists runs that are not done
+`-s open` (rpc `RunListParams.State = "open"`) lists runs that are not done <!-- notes:ignore -->
 or cancelled: state `running` and `needs_human`. The controller filters by
 ticket status (open or in_progress), so `--limit` counts only those runs.
 
