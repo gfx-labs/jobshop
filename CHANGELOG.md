@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.59](https://github.com/gfx-labs/jobshop/compare/v0.10.58...v0.10.59) (2026-11-26)
+
+
+### Bug fixes
+
+* **desk:** render system holders as plain text, not a session link ([#1381](https://github.com/gfx-labs/jobshop/issues/1381)) ([#1384](https://github.com/gfx-labs/jobshop/issues/1384)) ([707749c](https://github.com/gfx-labs/jobshop/commit/707749c6b13886c1037d82179236cb70f7451ee3))
+* **hooks:** name the replay error and rerun unfinished reads after a restart ([#1380](https://github.com/gfx-labs/jobshop/issues/1380)) ([#1385](https://github.com/gfx-labs/jobshop/issues/1385)) ([ba01b83](https://github.com/gfx-labs/jobshop/commit/ba01b83927c054cd951cfba3486214d52998c54b))
+
 ## [0.10.58](https://github.com/gfx-labs/jobshop/compare/v0.10.57...v0.10.58) (2026-11-26)
 
 
