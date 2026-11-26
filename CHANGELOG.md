@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.55](https://github.com/gfx-labs/jobshop/compare/v0.10.54...v0.10.55) (2026-11-26)
+
+
+### Features
+
+* **cli:** report notes lists unresolved 'Not done' lines in docs/notes ([#1362](https://github.com/gfx-labs/jobshop/issues/1362)) ([#1364](https://github.com/gfx-labs/jobshop/issues/1364)) ([8f7cc2d](https://github.com/gfx-labs/jobshop/commit/8f7cc2d9566dfcbb9221643f0001fb86614c7238))
+
 ## [0.10.54](https://github.com/gfx-labs/jobshop/compare/v0.10.53...v0.10.54) (2026-11-25)
 
 
