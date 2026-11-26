@@ -80,3 +80,10 @@ func TicketListSQL(s *Store, f store.Filter) (string, []any, error) {
 // SetWriterClock replaces the clock of the writer log, so a test controls
 // the waits and holds it records.
 func SetWriterClock(s *Store, now func() time.Time) { s.wlog.nowFunc = now }
+
+// ReaderCacheKiB is the page cache limit, in KiB, of a reader connection.
+func ReaderCacheKiB(ctx context.Context, s *Store) (int, error) {
+	var n int
+	err := s.rdb.QueryRowContext(ctx, "PRAGMA cache_size").Scan(&n)
+	return -n, err
+}

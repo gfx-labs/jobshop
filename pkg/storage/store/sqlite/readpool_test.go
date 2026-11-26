@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -112,4 +113,45 @@ func TestCollectionReadsDoNotWaitOnWriter(t *testing.T) {
 	got, err := col.Count(ctx, store.RecordFilter{})
 	require.NoError(t, err)
 	require.Equal(t, map[string]int{"done": 1}, got, "committed after the transaction")
+}
+
+// TestListWideRowsSortedPastCache lists more row data than a reader's page
+// cache holds, so the ORDER BY sorter would spill without it (#1372): the
+// order and every body must be intact, and readers carry the larger cache.
+func TestListWideRowsSortedPastCache(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	s, err := sqlite.Open(ctx, testPath(t), sqlite.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+
+	kib, err := sqlite.ReaderCacheKiB(ctx, s)
+	require.NoError(t, err)
+	require.Equal(t, 16384, kib)
+
+	const n = 400
+	body := strings.Repeat("x", 64<<10)
+	want := make([]string, 0, n)
+	for i := range n {
+		tk, err := store.Create(ctx, s, "test", store.NewTicket{
+			Project: "p", Kind: domain.KindTask, Title: fmt.Sprintf("t%03d", i),
+			Body: fmt.Sprintf("%03d%s", i, body), Priority: new(i % 3),
+		})
+		require.NoError(t, err)
+		want = append(want, tk.ID)
+	}
+	got, err := s.List(ctx, store.Filter{Project: "p", Limit: -1})
+	require.NoError(t, err)
+	require.Len(t, got, n)
+	// Priority first, then creation order: 0,3,6,..., then 1,4,..., then 2,5,...
+	var order []int
+	for p := range 3 {
+		for i := p; i < n; i += 3 {
+			order = append(order, i)
+		}
+	}
+	for k, i := range order {
+		require.Equal(t, want[i], got[k].ID)
+		require.Equal(t, fmt.Sprintf("%03d%s", i, body), got[k].Body)
+	}
 }
