@@ -54,3 +54,6 @@ Postgres 17 (`TestEveryQueryPrepares` too).
 - About 160 ms of the closed-session List is still the select, the 28
   column scan and `toTicket`; raw SQL for the same rows is about 30 ms.
   Not looked into here.
+  2026-11-26: looked into in #1372 (#1377), see `1372-list-row-scan.md`:
+  the split was wrong, about 80% was inside SQLite sorting wide rows past
+  the 2 MiB reader cache, and readers now get a 16 MiB cache.

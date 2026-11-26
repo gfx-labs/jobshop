@@ -60,6 +60,7 @@ steps:
 - Metrics: `jobshop.step.duration` and `jobshop.step.results` by step,
   type and result.
 - Not built: sandboxing command steps and a per-run worktree (#419).
+  2026-11-26: built in #419 (#448), see `419-command-step-sandbox.md`.
 - Tests: `TestAutoStepsMixedRun`, `TestAutoStepGoTemplate`, `TestAutoStepHTTPRetryAfter`,
   `TestAutoStepFailureEscalates`, `TestAutoStepRestart`,
   `TestAutoStepHTTPRestart`.

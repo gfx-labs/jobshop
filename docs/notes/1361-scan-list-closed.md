@@ -70,6 +70,7 @@ removed. The live DB is probably warmer than a fresh copy after a restart.
 - Not changed: `withLabels` makes every large `List` pay the IN-list cost
   (#1366). Fixing it would help other callers; this
   change does not depend on it.
+  2026-11-26: built in #1366 (#1369), see `1366-labels-one-parameter.md`.
 - No index. A partial covering index on closed sessions would cut the cold
   read but costs a migration and write overhead on every ticket change for
   about 30 ms warm that is left. The walk (20 ms) is the next cost.
