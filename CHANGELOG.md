@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.57](https://github.com/gfx-labs/jobshop/compare/v0.10.56...v0.10.57) (2026-11-26)
+
+
+### Performance
+
+* **store:** read List labels with one array parameter ([#1366](https://github.com/gfx-labs/jobshop/issues/1366)) ([#1369](https://github.com/gfx-labs/jobshop/issues/1369)) ([0527178](https://github.com/gfx-labs/jobshop/commit/052717809b6e2e3b4dbad7809081d0f3199f3a7f))
+
 ## [0.10.56](https://github.com/gfx-labs/jobshop/compare/v0.10.55...v0.10.56) (2026-11-26)
 
 
