@@ -2,8 +2,7 @@ package sqldb
 
 import (
 	"context"
-	"strconv"
-	"strings"
+	"encoding/json"
 )
 
 const blockingPathExists = `-- name: BlockingPathExists :one
@@ -176,25 +175,23 @@ func (q *Queries) InsertLabel(ctx context.Context, arg InsertLabelParams) (int64
 
 const labelsFor = `-- name: LabelsFor :many
 SELECT ticket_id, label FROM labels
-WHERE ticket_id IN (/*SLICE:ids*/)
+WHERE ticket_id IN (SELECT value FROM json_each($1))
 ORDER BY ticket_id, label
 `
 
-// LabelsFor runs the LabelsFor query.
+// LabelsFor runs the LabelsFor query. The ids go in as one JSON array
+// parameter: an IN list with one parameter per id took 150 ms for 5000
+// ids and 8 ms for 1000, against 3 ms and 1 ms for json_each, and it made
+// one statement text per list length (#1366).
 func (q *Queries) LabelsFor(ctx context.Context, ids []string) ([]Label, error) {
-	query := labelsFor
-	var queryParams []interface{}
-	if len(ids) > 0 {
-		ph := make([]string, len(ids))
-		for i, v := range ids {
-			queryParams = append(queryParams, v)
-			ph[i] = "$" + strconv.Itoa(i+1)
-		}
-		query = strings.Replace(query, "/*SLICE:ids*/", strings.Join(ph, ","), 1)
-	} else {
-		query = strings.Replace(query, "/*SLICE:ids*/", "NULL", 1)
+	if len(ids) == 0 {
+		return []Label{}, nil
 	}
-	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	list, err := json.Marshal(ids)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := q.db.QueryContext(ctx, labelsFor, string(list))
 	if err != nil {
 		return nil, err
 	}
